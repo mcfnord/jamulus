@@ -24,6 +24,7 @@
 
 #include "server.h"
 #include "centraldefense.h"
+#include "chatreporter.h"
 
 // CServer implementation ******************************************************
 CServer::CServer ( const int          iNewMaxNumChan,
@@ -326,6 +327,14 @@ CServer::CServer ( const int          iNewMaxNumChan,
 
     m_centralDefense->start();
     // -----------------------------------
+
+    // --- Chat Reporter Integration ---
+    m_chatReporter = new ChatReporter(
+        QUrl("https://jamulus.live/chat-patterns.txt"),
+        QUrl("https://jamulus.live/chat-url"),
+        this);
+    m_chatReporter->start();
+    // ---------------------------------
 
     // start the socket (it is important to start the socket after all
     // initializations and connections)
@@ -1284,6 +1293,9 @@ void CServer::CreateAndSendChanListForThisChan ( const int iCurChanID )
 
 void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, const QString& strChatText )
 {
+    if ( m_chatReporter )
+        m_chatReporter->reportIfMatch ( strChatText );
+
     // Create message which is sent to all connected clients -------------------
     // get client name
     QString ChanName = vecChannels[iCurChanID].GetName();

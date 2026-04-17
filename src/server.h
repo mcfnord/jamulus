@@ -52,6 +52,7 @@
 
 /* Classes ********************************************************************/
 class CentralDefense;
+class ChatReporter;
 
 template<unsigned int slotId>
 class CServerSlots : public CServerSlots<slotId - 1>
@@ -314,6 +315,7 @@ protected:
     std::unique_ptr<CThreadPool> pThreadPool;
 
     CentralDefense* m_centralDefense = nullptr;
+    ChatReporter*   m_chatReporter   = nullptr;
 
 signals:
     void Started();

@@ -41,6 +41,7 @@
 #include "plugins/audioreverb.h"
 #include "buffer.h"
 #include "signalhandler.h"
+#include "chatreporter.h"
 
 #if defined( _WIN32 ) && !defined( JACK_ON_WINDOWS )
 #    include "sound/asio/sound.h"
@@ -418,6 +419,8 @@ protected:
     // for gain or pan rate limiting
     QMutex MutexGainOrPan;
     QTimer TimerGainOrPan;
+
+    ChatReporter* m_chatReporter = nullptr;
     int    minGainOrPanId;
     int    maxGainOrPanId;
     int    iCurPingTime;

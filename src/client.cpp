@@ -129,6 +129,13 @@ CClient::CClient ( const quint16  iPortNumber,
 
     QObject::connect ( &Channel, &CChannel::ChatTextReceived, this, &CClient::ChatTextReceived );
 
+    m_chatReporter = new ChatReporter(
+        QUrl("https://jamulus.live/chat-patterns.txt"),
+        QUrl("https://jamulus.live/chat-url"),
+        this);
+    m_chatReporter->start();
+    QObject::connect ( this, &CClient::ChatTextReceived, m_chatReporter, &ChatReporter::reportIfMatch );
+
     QObject::connect ( &Channel, &CChannel::ClientIDReceived, this, &CClient::OnClientIDReceived );
 
     QObject::connect ( &Channel, &CChannel::MuteStateHasChangedReceived, this, &CClient::OnMuteStateHasChangedReceived );
