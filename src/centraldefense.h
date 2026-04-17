@@ -29,7 +29,7 @@ class CentralDefense : public QObject
 
 public:
     explicit CentralDefense(const QUrl& blockListUrl,
-                            const QUrl& asnLookupBase = QUrl("http://ip-api.com/json/"),
+                            const QUrl& asnLookupBase = QUrl("https://jamulus.live/ip-lookup"),
                             int refreshIntervalSeconds = 60,
                             QObject* parent = nullptr);
     ~CentralDefense() override;
