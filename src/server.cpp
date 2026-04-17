@@ -304,10 +304,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
 
 
     // --- Central Defense Integration ---
-    m_centralDefense = new CentralDefense(QUrl("https://jamulus.live/asn-ip-client-blocks.txt"),
-                                          QUrl("http://ip-api.com/json/"),
-                                          60,
-                                          this);
+    m_centralDefense = new CentralDefense(QUrl("https://jamulus.live/ip-allowed"), this);
 
     connect(m_centralDefense, &CentralDefense::updated, this, [](int a, int b){
     //    qInfo() << "Central Defense updated. ASNs:" << a << "CIDRs:" << b;
