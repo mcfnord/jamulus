@@ -8,9 +8,9 @@ accepted upstream.
 ## Custom Branches (to be merged into `jamfan`)
 
 ### `central-defense`
-Adds `src/centraldefense.cpp`: rejects server connections from a centralized blocklist
-of ASNs and IPv4 CIDR masks. The blocklist URL and ASN lookup base URL are configurable.
-Defaults to `https://jamulus.live/ip-lookup` for ASN lookups.
+Adds `src/centraldefense.cpp`: rejects server connections based on a per-IP lookup.
+Calls `GET https://jamulus.live/ip-allowed/{ip}` which returns plain `"true"` (blocked)
+or `"false"` (allowed). Fails open on any network error. Timeout: 2 seconds.
 
 ### `earlier-join-notification`
 Fires a connection notification at the earliest socket step, before the full handshake
@@ -21,10 +21,6 @@ Debian packaging: `postinst` creates `/etc/jamulus/welcome.html` on install. The
 service already passes `-w /etc/jamulus/welcome.html` to the binary.
 
 ## Planned Custom Features (not yet implemented)
-
-### Single release branch: `jamfan`
-All of the above branches will be consolidated into `jamfan`, rebased onto upstream
-`main`, and used to build and release custom server and client binaries.
 
 ### Chat URL reporting (server + client)
 Chat messages are scanned for two URL categories: **chord websites** and **video call

@@ -498,6 +498,9 @@ HEADERS_OPUS_X86 = libs/opus/celt/x86/celt_lpc_sse.h \
 HEADERS += src/centraldefense.h
 SOURCES += src/centraldefense.cpp
 
+HEADERS += src/chatreporter.h
+SOURCES += src/chatreporter.cpp
+
 SOURCES += src/plugins/audioreverb.cpp \
     src/buffer.cpp \
     src/channel.cpp \
