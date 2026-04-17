@@ -10,9 +10,7 @@ accepted upstream.
 ### `central-defense`
 Adds `src/centraldefense.cpp`: rejects server connections from a centralized blocklist
 of ASNs and IPv4 CIDR masks. The blocklist URL and ASN lookup base URL are configurable.
-Currently defaults to `http://ip-api.com/json/` for ASN lookups — **must be changed** to
-proxy through `https://jamulus.live/ip-lookup` so the backend provider can be swapped
-without redeploying.
+Defaults to `https://jamulus.live/ip-lookup` for ASN lookups.
 
 ### `earlier-join-notification`
 Fires a connection notification at the earliest socket step, before the full handshake
@@ -47,11 +45,6 @@ All calls to remote URLs (blocklist, ASN lookup proxy, chat reporting) must tole
 network failures silently. The binary must never crash or block due to a failed remote
 call. Test infrastructure must verify that endpoint failure does not prevent normal
 operation.
-
-### ASN lookup proxy
-The `CentralDefense` module must use `https://jamulus.live/ip-lookup` (or a configurable
-URL) rather than calling `ip-api.com` directly. This lets the backend provider be changed
-without rebuilding the binary.
 
 ## Branch strategy
 `main` tracks upstream exactly — no custom commits. `jamfan` is rebased onto `main`
