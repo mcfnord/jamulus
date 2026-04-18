@@ -1320,8 +1320,8 @@ void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, con
 
 void CServer::CreateAndSendRecorderStateForAllConChannels()
 {
-    // get recorder state
-    ERecorderState eRecorderState = JamController.GetRecorderState();
+    // external banner overrides actual recorder state
+    ERecorderState eRecorderState = m_bExternalRecordingBanner ? RS_RECORDING : JamController.GetRecorderState();
 
     // now send recorder state to all connected clients
     for ( int i = 0; i < iMaxNumChannels; i++ )
@@ -1568,6 +1568,12 @@ void CServer::SetEnableRecording ( bool bNewEnableRecording )
     bDisableRecording = !bNewEnableRecording;
 
     // the recording state may have changed, send recording state message
+    CreateAndSendRecorderStateForAllConChannels();
+}
+
+void CServer::SetExternalRecordingBanner ( bool bActive )
+{
+    m_bExternalRecordingBanner = bActive;
     CreateAndSendRecorderStateForAllConChannels();
 }
 

@@ -41,6 +41,20 @@ void CentralDefense::checkAndLookup(const QHostAddress& addr)
     QString ipStr = addr.toString();
 
     {
+        QMutexLocker l(&m_blockedCacheMutex);
+        auto it = m_blockedCache.find(ipStr);
+        if (it != m_blockedCache.end()) {
+            if (it.value().secsTo(QDateTime::currentDateTimeUtc()) < m_blockedCacheTtlSeconds) {
+                qCInfo(lcCentralDefense) << "lookup: cached-block" << ipStr;
+                emit addressBlocked(addr, QStringLiteral("ip-lookup-cached"));
+                emit addressChecked(addr, true, QStringLiteral("ip-lookup-cached"));
+                return;
+            }
+            m_blockedCache.erase(it);
+        }
+    }
+
+    {
         QMutexLocker l(&m_pendingMutex);
 
         if (m_inflightIp == ipStr) {
@@ -137,6 +151,10 @@ void CentralDefense::onLookupFinished()
     qCInfo(lcCentralDefense) << "lookup: finish" << ip << "blocked=" << blocked;
 
     if (blocked) {
+        {
+            QMutexLocker l(&m_blockedCacheMutex);
+            m_blockedCache.insert(ip, QDateTime::currentDateTimeUtc());
+        }
         emit addressBlocked(addr, QStringLiteral("ip-lookup"));
         emit addressChecked(addr, true, QStringLiteral("ip-lookup"));
     } else {

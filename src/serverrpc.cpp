@@ -270,6 +270,23 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
         response["result"] = "acknowledged";
         Q_UNUSED ( params );
     } );
+
+    /// @rpc_method jamulusserver/setRecordingBanner
+    /// @brief Shows or hides the red RECORDING banner on all connected clients without starting the server recorder.
+    ///  Intended for external recording tools that want to signal participants that recording is in progress.
+    /// @param {boolean} params.active - True to show the banner, false to hide it.
+    /// @result {string} result - Always "ok".
+    pRpcServer->HandleMethod ( "jamulusserver/setRecordingBanner", [=] ( const QJsonObject& params, QJsonObject& response ) {
+        auto jsonActive = params["active"];
+        if ( !jsonActive.isBool() )
+        {
+            response["error"] = CRpcServer::CreateJsonRpcError ( CRpcServer::iErrInvalidParams, "Invalid params: active is not a boolean" );
+            return;
+        }
+
+        pServer->SetExternalRecordingBanner ( jsonActive.toBool() );
+        response["result"] = "ok";
+    } );
 }
 
 #if defined( Q_OS_MACOS ) && QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
