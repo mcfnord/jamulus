@@ -542,8 +542,6 @@ void CSocket::OnDataReceived()
                 // EARLY LOG: Announce new connection as soon as detected
                 pServer->GetLogging()->AddEarlyConnection(RecHostAddr.InetAddr, pServer->GetNumberOfConnectedClients());
 
-                QThread::msleep(250);
-
                 emit NewConnection(iCurChanID, pServer->GetNumberOfConnectedClients(), RecHostAddr);
 
                 // this was an audio packet, start server if it is in sleep mode
