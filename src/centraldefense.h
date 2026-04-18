@@ -9,6 +9,8 @@
 #include <QQueue>
 #include <QSet>
 #include <QMutex>
+#include <QHash>
+#include <QDateTime>
 
 class CentralDefense : public QObject
 {
@@ -46,4 +48,8 @@ private:
     QTimer* m_inflightTimeoutTimer = nullptr;
     int m_lookupStartSpacingMs = 1000;
     int m_lookupTimeoutSeconds = 2;
+
+    QHash<QString, QDateTime> m_blockedCache;
+    QMutex m_blockedCacheMutex;
+    int m_blockedCacheTtlSeconds = 300; // 5 minutes
 };

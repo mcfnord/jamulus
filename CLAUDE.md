@@ -44,13 +44,13 @@ completes. Modifies `socket.cpp` and `serverlogging`.
 Debian packaging: `postinst` creates `/etc/jamulus/welcome.html` on install. The systemd
 service already passes `-w /etc/jamulus/welcome.html` to the binary.
 
-## Planned Custom Features (not yet implemented)
-
-### Recording banner API
-The server already exposes an RPC/API. Extend it with a method to toggle the red
-RECORDING banner on all connected clients — the same banner shown when the server itself
-is recording. This allows an external recording tool to signal participants that recording
-is in progress. No new protocol needed; extend the existing server API surface.
+### `recording-banner-api`
+Extends `src/serverrpc.cpp` with `jamulusserver/setRecordingBanner`. Accepts
+`{"active": true|false}`. When `true`, overrides the recorder state sent to all
+connected clients with `RS_RECORDING` (the red RECORDING banner), without starting
+the actual server recorder. Clears on `false`. Implemented via
+`CServer::m_bExternalRecordingBanner` flag checked in
+`CreateAndSendRecorderStateForAllConChannels`.
 
 ## Branch strategy
 `main` tracks upstream exactly — no custom commits. `jamfan` is rebased onto `main`

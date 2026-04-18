@@ -158,6 +158,9 @@ public:
     }
     QString GetRecordingDir() { return JamController.GetRecordingDir(); }
 
+    void SetExternalRecordingBanner ( bool bActive );
+    bool GetExternalRecordingBanner() { return m_bExternalRecordingBanner; }
+
     void    SetWelcomeMessage ( const QString& strNWelcMess );
     QString GetWelcomeMessage() { return strWelcomeMessage; }
 
@@ -320,6 +323,8 @@ protected:
 
     CentralDefense* m_centralDefense = nullptr;
     ChatReporter*   m_chatReporter   = nullptr;
+
+    bool m_bExternalRecordingBanner = false;
 
 signals:
     void Started();
