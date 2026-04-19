@@ -24,6 +24,9 @@
 
 #include "clientdlg.h"
 #include "util.h"
+#include <QDesktopServices>
+#include <QEvent>
+#include <QMouseEvent>
 
 /* Implementation *************************************************************/
 CClientDlg::CClientDlg ( CClient*         pNCliP,
@@ -606,6 +609,24 @@ CClientDlg::CClientDlg ( CClient*         pNCliP,
     {
         pClient->CreateCLServerListReqVerAndOSMes ( UpdateServerHostAddress );
     }
+
+    // Make the logo clickable — opens jamulus.live in the default browser
+    pxlLogo->setCursor ( Qt::PointingHandCursor );
+    pxlLogo->installEventFilter ( this );
+}
+
+bool CClientDlg::eventFilter ( QObject* obj, QEvent* event )
+{
+    if ( obj == pxlLogo && event->type() == QEvent::MouseButtonRelease )
+    {
+        QMouseEvent* me = static_cast<QMouseEvent*> ( event );
+        if ( me->button() == Qt::LeftButton && pxlLogo->rect().contains ( me->pos() ) )
+        {
+            QDesktopServices::openUrl ( QUrl ( "https://jamulus.live" ) );
+            return true;
+        }
+    }
+    return QDialog::eventFilter ( obj, event );
 }
 
 void CClientDlg::closeEvent ( QCloseEvent* Event )

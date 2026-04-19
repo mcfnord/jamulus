@@ -87,6 +87,7 @@ public:
                  QWidget*         parent = nullptr );
 
 protected:
+    bool eventFilter ( QObject* obj, QEvent* event ) override;
     void SetGUIDesign ( const EGUIDesign eNewDesign );
     void SetMeterStyle ( const EMeterStyle eNewMeterStyle );
     void SetMyWindowTitle ( const int iNumClients );
