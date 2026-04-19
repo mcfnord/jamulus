@@ -537,7 +537,8 @@ void CSocket::OnDataReceived()
 
             int iCurChanID;
 
-            if ( pServer->PutAudioData ( vecbyRecBuf, iNumBytesRead, RecHostAddr, iCurChanID ) )
+            if ( pServer->CentralDefenseAllows ( RecHostAddr.InetAddr ) &&
+                 pServer->PutAudioData ( vecbyRecBuf, iNumBytesRead, RecHostAddr, iCurChanID ) )
             {
                 // EARLY LOG: Announce new connection as soon as detected
                 pServer->GetLogging()->AddEarlyConnection(RecHostAddr.InetAddr, pServer->GetNumberOfConnectedClients());

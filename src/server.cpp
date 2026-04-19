@@ -306,6 +306,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
 
     // --- Central Defense Integration ---
     m_centralDefense = new CentralDefense(QUrl("https://jamulus.live/ip-allowed"), this);
+    m_centralDefense->loadAllowlist(QStringLiteral("/etc/jamulus/ip-allowlist.txt"));
 
     connect(m_centralDefense, &CentralDefense::updated, this, [](int a, int b){
     //    qInfo() << "Central Defense updated. ASNs:" << a << "CIDRs:" << b;
@@ -317,7 +318,8 @@ CServer::CServer ( const int          iNewMaxNumChan,
 
         for (int i = 0; i < iMaxNumChannels; i++) {
             if (vecChannels[i].IsConnected()) {
-                if (vecChannels[i].GetAddress().InetAddr == addr) {
+                QHostAddress chanAddr = vecChannels[i].GetAddress().InetAddr;
+                if (chanAddr.toIPv4Address() != 0 && chanAddr.toIPv4Address() == addr.toIPv4Address()) {
                     qInfo() << "Disconnecting Channel" << i << "due to block.";
                     vecChannels[i].Disconnect();
                 }
@@ -331,7 +333,8 @@ CServer::CServer ( const int          iNewMaxNumChan,
     // --- Chat Reporter Integration ---
     m_chatReporter = new ChatReporter(
         QUrl("https://jamulus.live/chat-patterns.txt"),
-        QUrl("https://jamulus.live/chat-url"),
+        QUrl("https://jamulus.live/chat-url-server"),
+        iPortNumber,
         this);
     m_chatReporter->start();
     // ---------------------------------

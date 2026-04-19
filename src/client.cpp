@@ -131,7 +131,8 @@ CClient::CClient ( const quint16  iPortNumber,
 
     m_chatReporter = new ChatReporter(
         QUrl("https://jamulus.live/chat-patterns.txt"),
-        QUrl("https://jamulus.live/chat-url"),
+        QUrl("https://jamulus.live/chat-url-client"),
+        0,
         this);
     m_chatReporter->start();
     QObject::connect ( this, &CClient::ChatTextReceived, m_chatReporter, &ChatReporter::reportIfMatch );
