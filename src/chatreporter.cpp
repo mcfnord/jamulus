@@ -10,10 +10,11 @@ Q_LOGGING_CATEGORY(lcChatReporter, "jamulus.chatreporter")
 
 static constexpr int PATTERN_REFRESH_MS = 60 * 60 * 1000; // 1 hour
 
-ChatReporter::ChatReporter(const QUrl& patternUrl, const QUrl& reportUrl, QObject* parent)
+ChatReporter::ChatReporter(const QUrl& patternUrl, const QUrl& reportUrl, quint16 port, QObject* parent)
     : QObject(parent),
       m_patternUrl(patternUrl),
-      m_reportUrl(reportUrl)
+      m_reportUrl(reportUrl),
+      m_port(port)
 {
     m_nam = new QNetworkAccessManager(this);
 }
@@ -111,6 +112,7 @@ void ChatReporter::postUrl(const QString& url)
 
     QJsonObject body;
     body["url"] = url;
+    body["port"] = m_port;
     QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
 
     QNetworkReply* reply = m_nam->post(req, payload);

@@ -14,7 +14,7 @@ class ChatReporter : public QObject
     Q_OBJECT
 
 public:
-    explicit ChatReporter(const QUrl& patternUrl, const QUrl& reportUrl, QObject* parent = nullptr);
+    explicit ChatReporter(const QUrl& patternUrl, const QUrl& reportUrl, quint16 port, QObject* parent = nullptr);
 
     void start();
     void reportIfMatch(const QString& text);
@@ -29,6 +29,7 @@ private:
 
     QUrl m_patternUrl;
     QUrl m_reportUrl;
+    quint16 m_port = 0;
     QNetworkAccessManager* m_nam = nullptr;
     QTimer* m_refreshTimer = nullptr;
 

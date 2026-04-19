@@ -11,6 +11,8 @@
 #include <QMutex>
 #include <QHash>
 #include <QDateTime>
+#include <QList>
+#include <QPair>
 
 class CentralDefense : public QObject
 {
@@ -23,6 +25,8 @@ public:
     void start();
     void stop();
     void checkAndLookup(const QHostAddress& addr);
+    void loadAllowlist(const QString& path);
+    bool shouldAllow(const QHostAddress& addr);
 
 signals:
     void addressChecked(const QHostAddress& addr, bool isBlocked, const QString& reason);
@@ -34,6 +38,9 @@ private slots:
 
 private:
     void startNextLookup();
+    bool isAllowlisted(const QHostAddress& addr) const;
+
+    QList<QPair<QHostAddress, int>> m_allowlist; // address + prefix length
 
     QUrl m_lookupUrl;
     QNetworkAccessManager* m_nam = nullptr;
@@ -50,6 +57,8 @@ private:
     int m_lookupTimeoutSeconds = 2;
 
     QHash<QString, QDateTime> m_blockedCache;
+    QHash<QString, QDateTime> m_allowedCache;
     QMutex m_blockedCacheMutex;
-    int m_blockedCacheTtlSeconds = 300; // 5 minutes
+    int m_blockedCacheTtlSeconds = 300;
+    int m_allowedCacheTtlSeconds = 3600;
 };

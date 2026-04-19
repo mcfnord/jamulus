@@ -45,6 +45,7 @@
 #include "recorder/jamcontroller.h"
 
 #include "threadpool.h"
+#include "centraldefense.h"
 
 /* Definitions ****************************************************************/
 // no valid channel number
@@ -177,6 +178,7 @@ public:
     bool IsDelayPanningEnabled() { return bDelayPan; }
 
     CServerLogging* GetLogging() { return &Logging; }
+    bool CentralDefenseAllows(const QHostAddress& addr) { return !m_centralDefense || m_centralDefense->shouldAllow(addr); }
 
 
 protected:

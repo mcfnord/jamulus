@@ -10,4 +10,20 @@ sudo mkdir -p /etc/jamulus
 sudo touch /etc/jamulus/welcome.html
 chmod a+r /etc/jamulus/welcome.html
 
+if [ ! -f /etc/jamulus/ip-allowlist.txt ]; then
+    cat > /etc/jamulus/ip-allowlist.txt << 'EOF'
+# Local IP allowlist for Jamulus central-defense.
+# IPs or CIDR ranges listed here bypass the central lookup and are always allowed.
+#
+# One entry per line. Examples:
+#   192.168.1.0/24
+#   10.0.0.5
+#
+# Lines starting with # are comments and ignored.
+# Lines starting with ! have the ! stripped and the IP/range is still allowed
+# (useful if you're used to the ! syntax from the central block list).
+EOF
+    chmod a+r /etc/jamulus/ip-allowlist.txt
+fi
+
 #DEBHELPER#
