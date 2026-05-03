@@ -195,6 +195,7 @@ protected:
     virtual void CreateAndSendChanListForThisChan ( const int iCurChanID );
 
     virtual void CreateAndSendChatTextForAllConChannels ( const int iCurChanID, const QString& strChatText );
+    void BroadcastServerMessage ( const QString& text );
 
     virtual void CreateOtherMuteStateChanged ( const int iCurChanID, const int iOtherChanID, const bool bIsMuted );
 
@@ -238,6 +239,7 @@ protected:
     // copy constructor/operator
     CChannel vecChannels[MAX_NUM_CHANNELS];
     int      iMaxNumChannels;
+    quint16  m_iPort;
 
     int    iCurNumChannels;
     int    vecChannelOrder[MAX_NUM_CHANNELS];

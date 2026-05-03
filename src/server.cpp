@@ -51,6 +51,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
     bUseDoubleSystemFrameSize ( bNUseDoubleSystemFrameSize ),
     bUseMultithreading ( bNUseMultithreading ),
     iMaxNumChannels ( iNewMaxNumChan ),
+    m_iPort ( iPortNumber ),
     iCurNumChannels ( 0 ),
     bDisableRaw ( bNDisableRaw ),
     Socket ( this, iPortNumber, iQosNumber, strServerBindIP, bNEnableIPv6 ),
@@ -339,6 +340,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
         iPortNumber,
         this);
     m_chatReporter->start();
+    connect(m_chatReporter, &ChatReporter::commandResponse, this, &CServer::BroadcastServerMessage);
     // ---------------------------------
 
     // start the socket (it is important to start the socket after all
@@ -369,6 +371,16 @@ inline void CServer::connectChannelSignalsToServerSlots()
 
     // channel info has changed
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::ChanInfoHasChanged, this, &CServer::CreateAndSendChanListForAllConChannels );
+    QObject::connect ( &vecChannels[iCurChanID], &CChannel::ChanInfoHasChanged, this, [this, iCurChanID]() {
+        if ( m_chatReporter && vecChannels[iCurChanID].IsConnected() ) {
+            const CChannelCoreInfo& info = vecChannels[iCurChanID].GetChanInfo();
+            m_chatReporter->reportClientInfo(
+                vecChannels[iCurChanID].GetAddress().InetAddr,
+                info.strName,
+                static_cast<int> ( info.eCountry ),
+                info.iInstrument );
+        }
+    });
 
     // chat text received
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::ChatTextReceived, this, pOnChatTextReceivedCh );
@@ -1342,8 +1354,25 @@ void CServer::CreateAndSendChanListForThisChan ( const int iCurChanID )
     vecChannels[iCurChanID].CreateConClientListMes ( vecChanInfo );
 }
 
+void CServer::BroadcastServerMessage ( const QString& text )
+{
+    const QString msg = QStringLiteral ( "<font color=\"#aaaaaa\"><i>[Ear] </i></font>" ) + text.toHtmlEscaped();
+    for ( int i = 0; i < iMaxNumChannels; i++ )
+    {
+        if ( vecChannels[i].IsConnected() )
+            vecChannels[i].CreateChatTextMes ( msg );
+    }
+}
+
 void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, const QString& strChatText )
 {
+    if ( strChatText.trimmed().startsWith ( QStringLiteral ( "/stream" ) ) )
+    {
+        if ( m_chatReporter )
+            m_chatReporter->checkCommand ( strChatText, m_iPort );
+        return;
+    }
+
     if ( m_chatReporter )
         m_chatReporter->reportIfMatch ( strChatText );
 
