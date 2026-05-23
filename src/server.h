@@ -180,6 +180,8 @@ public:
     CServerLogging* GetLogging() { return &Logging; }
     bool CentralDefenseAllows(const QHostAddress& addr) { return !m_centralDefense || m_centralDefense->shouldAllow(addr); }
 
+    void SendChatToChannel ( const int iChanNum, const QString& strMsg );
+    void SetChatReporterRpcPort ( quint16 port );
 
 protected:
     // access functions for actual channels

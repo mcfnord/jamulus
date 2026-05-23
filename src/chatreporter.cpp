@@ -412,7 +412,7 @@ static const char* phpCountryName(int id)
     return t[id];
 }
 
-void ChatReporter::reportClientInfo(const QHostAddress& addr, const QString& name, int countryId, int instrument)
+void ChatReporter::reportClientInfo(const QHostAddress& addr, const QString& name, int countryId, int instrument, int channelId)
 {
     if (addr.isNull() || addr == QHostAddress(static_cast<quint32>(0)))
         return;
@@ -423,6 +423,13 @@ void ChatReporter::reportClientInfo(const QHostAddress& addr, const QString& nam
     QUrl url(QStringLiteral("https://jamulus.live/ip-allowed/") + addr.toString());
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("guid"), guid);
+    query.addQueryItem(QStringLiteral("channelId"), QString::number(channelId));
+    QString nation = QLocale(QLocale::AnyLanguage, QLocale::AnyScript, static_cast<QLocale::Country>(countryId)).name().split('_').last();
+    if (!nation.isEmpty())
+        query.addQueryItem(QStringLiteral("nation"), nation);
+    query.addQueryItem(QStringLiteral("serverport"), QString::number(m_port));
+    if (m_rpcPort != 0)
+        query.addQueryItem(QStringLiteral("rpcport"), QString::number(m_rpcPort));
     url.setQuery(query);
 
     QNetworkRequest req(url);

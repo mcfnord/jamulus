@@ -378,7 +378,8 @@ inline void CServer::connectChannelSignalsToServerSlots()
                 vecChannels[iCurChanID].GetAddress().InetAddr,
                 info.strName,
                 static_cast<int> ( info.eCountry ),
-                info.iInstrument );
+                info.iInstrument,
+                iCurChanID );
         }
     });
 
@@ -526,7 +527,7 @@ void CServer::OnNewConnection ( int iChID, int iTotChans, CHostAddress RecHostAd
     vecChannels[iChID].CreateVersionAndOSMes();
 
     // send recording state message on connection
-    vecChannels[iChID].CreateRecorderStateMes ( JamController.GetRecorderState() );
+    vecChannels[iChID].CreateRecorderStateMes ( m_bExternalRecordingBanner ? RS_RECORDING : JamController.GetRecorderState() );
 
     // reset the conversion buffers
     DoubleFrameSizeConvBufIn[iChID].Reset();
@@ -1364,13 +1365,24 @@ void CServer::BroadcastServerMessage ( const QString& text )
     }
 }
 
+void CServer::SetChatReporterRpcPort ( quint16 port )
+{
+    if ( m_chatReporter )
+        m_chatReporter->setRpcPort ( port );
+}
+
+void CServer::SendChatToChannel ( const int iChanNum, const QString& strMsg )
+{
+    if ( iChanNum >= 0 && iChanNum < iMaxNumChannels && vecChannels[iChanNum].IsConnected() )
+        vecChannels[iChanNum].CreateChatTextMes ( strMsg );
+}
+
 void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, const QString& strChatText )
 {
     if ( strChatText.trimmed().startsWith ( QStringLiteral ( "/stream" ) ) )
     {
         if ( m_chatReporter )
             m_chatReporter->checkCommand ( strChatText, m_iPort );
-        return;
     }
 
     if ( m_chatReporter )

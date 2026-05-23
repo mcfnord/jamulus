@@ -1014,6 +1014,7 @@ int main ( int argc, char** argv )
             if ( pRpcServer )
             {
                 new CServerRpc ( &Server, pRpcServer, pRpcServer );
+                Server.SetChatReporterRpcPort ( static_cast<quint16> ( iJsonRpcPortNumber ) );
             }
 
 #endif

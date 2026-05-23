@@ -287,6 +287,30 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
         pServer->SetExternalRecordingBanner ( jsonActive.toBool() );
         response["result"] = "ok";
     } );
+
+    /// @rpc_method jamulusserver/sendClientChatMessage
+    /// @brief Sends a chat message to a single connected client by channel ID.
+    /// @param {number} params.channelId - The channel slot to target.
+    /// @param {string} params.message   - The HTML message to deliver.
+    /// @result {string} result - "ok" on success, error if channelId is invalid or client not connected.
+    pRpcServer->HandleMethod ( "jamulusserver/sendClientChatMessage", [=] ( const QJsonObject& params, QJsonObject& response ) {
+        auto jsonChannelId = params["channelId"];
+        auto jsonMessage   = params["message"];
+
+        if ( !jsonChannelId.isDouble() )
+        {
+            response["error"] = CRpcServer::CreateJsonRpcError ( CRpcServer::iErrInvalidParams, "Invalid params: channelId is not a number" );
+            return;
+        }
+        if ( !jsonMessage.isString() )
+        {
+            response["error"] = CRpcServer::CreateJsonRpcError ( CRpcServer::iErrInvalidParams, "Invalid params: message is not a string" );
+            return;
+        }
+
+        pServer->SendChatToChannel ( jsonChannelId.toInt(), jsonMessage.toString() );
+        response["result"] = "ok";
+    } );
 }
 
 #if defined( Q_OS_MACOS ) && QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
