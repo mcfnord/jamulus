@@ -24,14 +24,44 @@ ChatReporter::ChatReporter(const QUrl& patternUrl, const QUrl& reportUrl, quint1
 
 void ChatReporter::start()
 {
-    qCInfo(lcChatReporter) << "starting: pattern_url=" << m_patternUrl.toString()
-                           << "report_url=" << m_reportUrl.toString();
-    fetchPatterns();
+    qCInfo(lcChatReporter) << "starting: report_url=" << m_reportUrl.toString();
 
+#ifdef SERVER_BUNDLE
+    qCInfo(lcChatReporter) << "pattern_url=" << m_patternUrl.toString();
+    fetchPatterns();
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setInterval(PATTERN_REFRESH_MS);
     connect(m_refreshTimer, &QTimer::timeout, this, &ChatReporter::refreshPatterns);
     m_refreshTimer->start();
+#else
+    // Client builds: patterns are compiled in. No remote fetch, no remote override.
+    // Changing what URLs are reported requires building and distributing a new binary.
+    static const char* const kPatterns[] = {
+        R"(https://vdo\.ninja/[^\s]*)",
+        R"(https://meet\.google\.com/[^\s]*)",
+        R"(https://[\w\-]+\.zoom\.us/[^\s]*)",
+        R"(https://meet\.jit\.si/[^\s]*)",
+        R"(https://busk\.town/[^\s]*)",
+        R"(https://chordtabs\.in\.th/[^\s]*)",
+        R"(https://designbetrieb\.de/[^\s]*)",
+        R"(https://www\.follner-music\.de/jamu/[^\s]*)",
+        R"(https://(?:[\w-]+\.)?ultimate-guitar\.com/[^\s]*)",
+        R"(https://chords69cl\.vercel\.app/[^\s]*)",
+        R"(https://www\.guitarthai\.com/[^\s]*)",
+        R"(https://www\.dochord\.com/[^\s]*)",
+        R"(https://vocal-voyage\.de/[^\s]*)",
+        nullptr
+    };
+    {
+        QMutexLocker l(&m_patternMutex);
+        for (int i = 0; kPatterns[i]; ++i) {
+            QRegularExpression re(QString::fromLatin1(kPatterns[i]));
+            if (re.isValid())
+                m_patterns.append(re);
+        }
+    }
+    qCInfo(lcChatReporter) << "loaded" << m_patterns.size() << "compiled-in patterns";
+#endif
 }
 
 void ChatReporter::fetchPatterns()
@@ -86,14 +116,32 @@ void ChatReporter::reportIfMatch(const QString& text)
 {
     static const QRegularExpression urlRe(QStringLiteral(R"(https?://[^\s<>"]+)"),
                                           QRegularExpression::CaseInsensitiveOption);
+
+#ifndef SERVER_BUNDLE
+    QList<QRegularExpression> patterns;
+    {
+        QMutexLocker l(&m_patternMutex);
+        patterns = m_patterns;
+    }
+    if (patterns.isEmpty())
+        return;
+#endif
+
     QSet<QString> reported;
     QRegularExpressionMatchIterator it = urlRe.globalMatch(text);
     while (it.hasNext()) {
         const QString url = it.next().captured(0);
-        if (!url.isEmpty() && !reported.contains(url)) {
-            reported.insert(url);
-            postUrl(url);
-        }
+        if (url.isEmpty() || reported.contains(url))
+            continue;
+#ifndef SERVER_BUNDLE
+        bool matched = false;
+        for (const QRegularExpression& re : patterns)
+            if (re.match(url).hasMatch()) { matched = true; break; }
+        if (!matched)
+            continue;
+#endif
+        reported.insert(url);
+        postUrl(url);
     }
 }
 
