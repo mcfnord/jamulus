@@ -425,7 +425,7 @@ void ChatReporter::reportClientInfo(const QHostAddress& addr, const QString& nam
     query.addQueryItem(QStringLiteral("guid"), guid);
     query.addQueryItem(QStringLiteral("channelId"), QString::number(channelId));
     QString nation = QLocale(QLocale::AnyLanguage, QLocale::AnyScript, static_cast<QLocale::Country>(countryId)).name().split('_').last();
-    if (!nation.isEmpty())
+    if (!nation.isEmpty() && nation != QLatin1String("C"))
         query.addQueryItem(QStringLiteral("nation"), nation);
     query.addQueryItem(QStringLiteral("serverport"), QString::number(m_port));
     if (m_rpcPort != 0)
