@@ -372,7 +372,8 @@ inline void CServer::connectChannelSignalsToServerSlots()
     // channel info has changed
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::ChanInfoHasChanged, this, &CServer::CreateAndSendChanListForAllConChannels );
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::ChanInfoHasChanged, this, [this, iCurChanID]() {
-        if ( m_chatReporter && vecChannels[iCurChanID].IsConnected() ) {
+        if ( m_chatReporter && vecChannels[iCurChanID].IsConnected() && !m_vecChanInfoReported[iCurChanID] ) {
+            m_vecChanInfoReported[iCurChanID] = true;
             const CChannelCoreInfo& info = vecChannels[iCurChanID].GetChanInfo();
             m_chatReporter->reportClientInfo(
                 vecChannels[iCurChanID].GetAddress().InetAddr,
@@ -456,6 +457,8 @@ void CServer::OnNewConnection ( int iChID, int iTotChans, CHostAddress RecHostAd
             return;
         }
     }
+
+    m_vecChanInfoReported[iChID] = false;
 
     // inform the client about its own ID at the server (note that this
     // must be the first message to be sent for a new connection)

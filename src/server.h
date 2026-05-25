@@ -329,6 +329,7 @@ protected:
 
     CentralDefense* m_centralDefense = nullptr;
     ChatReporter*   m_chatReporter   = nullptr;
+    bool            m_vecChanInfoReported[MAX_NUM_CHANNELS] = {};
 
     bool m_bExternalRecordingBanner = false;
 
