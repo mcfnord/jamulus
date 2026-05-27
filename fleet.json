@@ -1,0 +1,15 @@
+[
+  { "name": "Hot Texas!",      "host": "50.116.25.151",  "user": "root",   "lang": "English" },
+  { "name": "Texas Shuffle",   "host": "50.116.25.151",  "user": "root",   "lang": "English", "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 },
+  { "name": "Studio D",        "host": "24.199.127.71",  "user": "root",   "lang": "English" },
+  { "name": "Freiheit",        "host": "130.61.155.141", "user": "ubuntu", "lang": "German",  "arch": "aarch64" },
+  { "name": "Jazzkeller",      "host": "130.61.155.141", "user": "ubuntu", "lang": "German",  "arch": "aarch64", "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 },
+  { "name": "Capitol",         "host": "172.239.129.32",  "user": "root",   "lang": "English"    },
+  { "name": "Blue Room",       "host": "172.239.129.32",  "user": "root",   "lang": "English",   "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 },
+  { "name": "Windy",           "host": "172.236.119.91",  "user": "root",   "lang": "English"    },
+  { "name": "Green Mill",      "host": "172.236.119.91",  "user": "root",   "lang": "English",   "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 },
+  { "name": "Sindone",         "host": "92.4.218.204",   "user": "opc",    "lang": "Italian", "arch": "aarch64" },
+  { "name": "Valdo",           "host": "92.4.218.204",   "user": "opc",    "lang": "Italian", "arch": "aarch64", "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 },
+  { "name": "Louvre",          "host": "51.44.19.219",   "user": "ubuntu", "lang": "French"  },
+  { "name": "Cave",            "host": "51.44.19.219",   "user": "ubuntu", "lang": "French",  "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 }
+]

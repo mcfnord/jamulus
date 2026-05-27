@@ -24,6 +24,7 @@
  \******************************************************************************/
 
 #include "serverrpc.h"
+#include "jamuluslookups.h"
 
 CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* parent ) : QObject ( parent )
 {
@@ -98,7 +99,7 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
                 { "channels", pServer->GetClientNumAudioChannels ( i ) },
                 { "instrumentCode", vecChanInfo[i].iInstrument },
                 { "city", vecChanInfo[i].strCity },
-                { "countryName", QLocale::countryToString ( vecChanInfo[i].eCountry ) },
+                { "countryName", QString ( phpCountryName ( static_cast<int> ( vecChanInfo[i].eCountry ) ) ) },
                 { "skillLevelCode", vecChanInfo[i].eSkillLevel },
             };
             clients.append ( client );
