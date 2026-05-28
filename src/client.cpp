@@ -126,6 +126,10 @@ CClient::CClient ( const quint16  iPortNumber,
 
     QObject::connect ( &Channel, &CChannel::Disconnected, this, &CClient::Disconnected );
 
+    QObject::connect ( this, &CClient::Disconnected, this, [this]() {
+        m_chatReporter->setServerAddr ( QString() );
+    } );
+
     QObject::connect ( &Channel, &CChannel::NewConnection, this, &CClient::OnNewConnection );
 
     QObject::connect ( &Channel, &CChannel::ChatTextReceived, this, &CClient::ChatTextReceived );
@@ -611,6 +615,7 @@ bool CClient::SetServerAddr ( QString strNAddr )
     {
         // apply address to the channel
         Channel.SetAddress ( HostAddress );
+        m_chatReporter->setServerAddr ( HostAddress.toString() );
 
         return true;
     }
