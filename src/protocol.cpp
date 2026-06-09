@@ -922,6 +922,18 @@ void CProtocol::ParseConnectionLessMessageBody ( const CVector<uint8_t>& vecbyMe
         EvaluateCLChannelLevelListMes ( InetAddr, vecbyMesBodyData );
         break;
 
+    case PROTMESSID_CLM_REQ_CHANNEL_LEVEL_LIST:
+        EvaluateCLReqChannelLevelListMes ( InetAddr );
+        break;
+
+    case PROTMESSID_CLM_RAWAUDIO_SUPPORTED:
+        EvaluateCLRawAudioSupportedMes ( InetAddr );
+        break;
+
+    case PROTMESSID_CLM_REQ_RAWAUDIO_SUPPORTED:
+        EvaluateCLReqRawAudioSupportedMes ( InetAddr );
+        break;
+
     case PROTMESSID_CLM_REGISTER_SERVER_RESP:
         EvaluateCLRegisterServerResp ( InetAddr, vecbyMesBodyData );
         break;
@@ -2563,6 +2575,13 @@ bool CProtocol::EvaluateCLChannelLevelListMes ( const CHostAddress& InetAddr, co
     return false; // no error
 }
 
+bool CProtocol::EvaluateCLReqChannelLevelListMes ( const CHostAddress& InetAddr )
+{
+    emit CLReqChannelLevelList ( InetAddr );
+
+    return false; // no error
+}
+
 void CProtocol::CreateCLRegisterServerResp ( const CHostAddress& InetAddr, const ESvrRegResult eResult )
 {
     int              iPos = 0; // init position pointer
@@ -2595,6 +2614,28 @@ bool CProtocol::EvaluateCLRegisterServerResp ( const CHostAddress& InetAddr, con
     // invoke message action
     emit CLRegisterServerResp ( InetAddr, static_cast<ESvrRegResult> ( iSvrRegResult ) );
 
+    return false; // no error
+}
+
+void CProtocol::CreateCLRawAudioSupportedMes ( const CHostAddress& InetAddr )
+{
+    CreateAndImmSendConLessMessage ( PROTMESSID_CLM_RAWAUDIO_SUPPORTED, CVector<uint8_t> ( 0 ), InetAddr );
+}
+
+bool CProtocol::EvaluateCLRawAudioSupportedMes ( const CHostAddress& InetAddr )
+{
+    emit CLRawAudioSupportedReceived ( InetAddr );
+    return false; // no error
+}
+
+void CProtocol::CreateCLReqRawAudioSupportedMes ( const CHostAddress& InetAddr )
+{
+    CreateAndImmSendConLessMessage ( PROTMESSID_CLM_REQ_RAWAUDIO_SUPPORTED, CVector<uint8_t> ( 0 ), InetAddr );
+}
+
+bool CProtocol::EvaluateCLReqRawAudioSupportedMes ( const CHostAddress& InetAddr )
+{
+    emit CLReqRawAudioSupported ( InetAddr );
     return false; // no error
 }
 

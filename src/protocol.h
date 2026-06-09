@@ -83,7 +83,10 @@
 #define PROTMESSID_CLM_CHANNEL_LEVEL_LIST     1015 // channel level list
 #define PROTMESSID_CLM_REGISTER_SERVER_RESP   1016 // status of server registration request
 #define PROTMESSID_CLM_REGISTER_SERVER_EX     1017 // register server with extended information
-#define PROTMESSID_CLM_RED_SERVER_LIST        1018 // reduced server list
+#define PROTMESSID_CLM_RED_SERVER_LIST           1018 // reduced server list
+#define PROTMESSID_CLM_REQ_CHANNEL_LEVEL_LIST   1028 // request channel level list (connectionless)
+#define PROTMESSID_CLM_RAWAUDIO_SUPPORTED        1036 // raw (uncompressed) audio is supported (connectionless)
+#define PROTMESSID_CLM_REQ_RAWAUDIO_SUPPORTED    1037 // request raw audio support (connectionless)
 
 // special IDs
 #define PROTMESSID_SPECIAL_SPLIT_MESSAGE 2001 // a container for split messages
@@ -155,6 +158,8 @@ public:
     void CreateCLReqConnClientsListMes ( const CHostAddress& InetAddr );
     void CreateCLChannelLevelListMes ( const CHostAddress& InetAddr, const CVector<uint16_t>& vecLevelList, const int iNumClients );
     void CreateCLRegisterServerResp ( const CHostAddress& InetAddr, const ESvrRegResult eResult );
+    void CreateCLRawAudioSupportedMes ( const CHostAddress& InetAddr );
+    void CreateCLReqRawAudioSupportedMes ( const CHostAddress& InetAddr );
 
     static bool ParseMessageFrame ( const CVector<uint8_t>& vecbyData,
                                     const int               iNumBytesIn,
@@ -281,6 +286,9 @@ protected:
     bool EvaluateCLConnClientsListMes ( const CHostAddress& InetAddr, const CVector<uint8_t>& vecData );
     bool EvaluateCLReqConnClientsListMes ( const CHostAddress& InetAddr );
     bool EvaluateCLChannelLevelListMes ( const CHostAddress& InetAddr, const CVector<uint8_t>& vecData );
+    bool EvaluateCLReqChannelLevelListMes ( const CHostAddress& InetAddr );
+    bool EvaluateCLRawAudioSupportedMes ( const CHostAddress& InetAddr );
+    bool EvaluateCLReqRawAudioSupportedMes ( const CHostAddress& InetAddr );
     bool EvaluateCLRegisterServerResp ( const CHostAddress& InetAddr, const CVector<uint8_t>& vecData );
 
     int iOldRecID;
@@ -348,5 +356,8 @@ signals:
     void CLConnClientsListMesReceived ( CHostAddress InetAddr, CVector<CChannelInfo> vecChanInfo );
     void CLReqConnClientsList ( CHostAddress InetAddr );
     void CLChannelLevelListReceived ( CHostAddress InetAddr, CVector<uint16_t> vecLevelList );
+    void CLReqChannelLevelList ( CHostAddress InetAddr );
     void CLRegisterServerResp ( CHostAddress InetAddr, ESvrRegResult eStatus );
+    void CLRawAudioSupportedReceived ( CHostAddress InetAddr );
+    void CLReqRawAudioSupported ( CHostAddress InetAddr );
 };
