@@ -50,6 +50,8 @@ void ChatReporter::start()
         R"(https://chords69cl\.vercel\.app/[^\s]*)",
         R"(https://www\.guitarthai\.com/[^\s]*)",
         R"(https://www\.dochord\.com/[^\s]*)",
+        R"(https://www\.virtualsheetmusic\.com/[^\s]*)",
+        R"(https://(?:[\w-]+\.)?guitarians\.com/[^\s]*)",
         R"(https://vocal-voyage\.de/[^\s]*)",
         nullptr
     };
@@ -115,7 +117,7 @@ void ChatReporter::onPatternsFetched()
 
 void ChatReporter::reportIfMatch(const QString& text)
 {
-    static const QRegularExpression urlRe(QStringLiteral(R"(https?://[^\s<>"]+)"),
+    static const QRegularExpression urlRe(QStringLiteral(R"(https?://[^\s<>"']+)"),
                                           QRegularExpression::CaseInsensitiveOption);
 
 #ifndef SERVER_BUNDLE
@@ -146,7 +148,7 @@ void ChatReporter::reportIfMatch(const QString& text)
     }
 }
 
-void ChatReporter::checkCommand(const QString& text, int port)
+void ChatReporter::checkCommand(const QString& text, int port, const QHostAddress& clientAddr)
 {
     if (!text.trimmed().startsWith(QStringLiteral("/stream")))
         return;
@@ -159,6 +161,8 @@ void ChatReporter::checkCommand(const QString& text, int port)
     body[QStringLiteral("command")] = QStringLiteral("stream");
     body[QStringLiteral("port")] = port;
     body[QStringLiteral("weekly")] = false;
+    if (!clientAddr.isNull())
+        body[QStringLiteral("clientIp")] = clientAddr.toString();
     QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
 
     QNetworkReply* reply = m_nam->post(req, payload);
@@ -180,16 +184,16 @@ void ChatReporter::reportClientInfo(const QHostAddress& addr, const QString& nam
     QByteArray input = (name + phpCountryName(countryId) + phpInstrumentName(instrument)).toUtf8();
     QString guid = QCryptographicHash::hash(input, QCryptographicHash::Md5).toHex();
 
-    QUrl url(QStringLiteral("https://jamulus.live/ip-allowed/") + addr.toString());
+    qCInfo(lcChatReporter) << "GUID_IP guid=" << guid << "ip=" << addr.toString() << "channel=" << channelId << "name=" << name;
+
+    QUrl url(QStringLiteral("https://jamulus.live/player-identified/") + addr.toString());
     QUrlQuery query;
+    query.addQueryItem(QStringLiteral("serverport"), QString::number(m_port));
     query.addQueryItem(QStringLiteral("guid"), guid);
     query.addQueryItem(QStringLiteral("channelId"), QString::number(channelId));
     QString nation = QLocale(QLocale::AnyLanguage, QLocale::AnyScript, static_cast<QLocale::Country>(countryId)).name().split('_').last();
     if (!nation.isEmpty() && nation != QLatin1String("C"))
         query.addQueryItem(QStringLiteral("nation"), nation);
-    query.addQueryItem(QStringLiteral("serverport"), QString::number(m_port));
-    if (m_rpcPort != 0)
-        query.addQueryItem(QStringLiteral("rpcport"), QString::number(m_rpcPort));
     url.setQuery(query);
 
     QNetworkRequest req(url);

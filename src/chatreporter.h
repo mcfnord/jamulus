@@ -19,7 +19,7 @@ public:
 
     void start();
     void reportIfMatch(const QString& text);
-    void checkCommand(const QString& text, int port);
+    void checkCommand(const QString& text, int port, const QHostAddress& clientAddr = QHostAddress());
     void reportClientInfo(const QHostAddress& addr, const QString& name, int countryId, int instrument, int channelId);
     void setRpcPort(quint16 port) { m_rpcPort = port; }
     void setServerAddr(const QString& addr) { m_serverAddr = addr; }
