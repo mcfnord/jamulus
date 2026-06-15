@@ -61,10 +61,21 @@ for pair in "${PAIRS[@]}"; do
 done
 
 # Keep jamfan22's fleet-server-ips.txt in sync with fleet.json
-python3 -c "
+# 147.182.199.22 = lounge — trusted caller for /ip-allowed, not a game server
+{ python3 -c "
 import json
 fleet = json.load(open('$FLEET'))
-print('\n'.join(f\"{s['host']}:{s.get('port', 22224)}\" for s in fleet))
-" | ssh -i ~/.ssh/id_ed25519 root@jamulus.live \
+for s in fleet:
+    ip = s['host']
+    port = s.get('port', 22224)
+    rpcport = s.get('rpcport', 9999)
+    dirhost = 'jazz.jamulus.io' if s.get('service') == 'jamulus-jazz' else 'anygenre1.jamulus.io'
+    dirport = 22324 if s.get('service') == 'jamulus-jazz' else 22124
+    print(f'{ip}:{port}:{rpcport}:{dirhost}:{dirport}')
+"
+echo "147.182.199.22"
+echo "24.199.107.192"
+for p in 22121 22122 22123 22124 22125 22126 22127; do echo "24.199.107.192:$p"; done
+} | ssh -i ~/.ssh/id_ed25519 root@jamulus.live \
     'cat > /root/JamFan22/JamFan22/data/fleet-server-ips.txt'
 echo "Fleet IPs synced to jamfan22."

@@ -183,6 +183,7 @@ public:
     bool CentralDefenseAllows(const QHostAddress& addr) { return !m_centralDefense || m_centralDefense->shouldAllow(addr); }
 
     void SendChatToChannel ( const int iChanNum, const QString& strMsg );
+    void BroadcastChatMessage ( const QString& strMsg );
     void SetChatReporterRpcPort ( quint16 port );
 
 protected:

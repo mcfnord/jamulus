@@ -1,26 +1,5 @@
 # Jamulus Fork TODOs
 
-## GUID parity test suite
-
-Four tests in order — stop at first failure and fix before continuing. **Do not ship any cross-source GUID join feature until all four pass.**
-
-**Test 1 — Static table diff (no players needed, run locally)**: Write `check_guid_tables.py` hardcoding both lookup tables and comparing them for all 50 instrument codes and all country codes.
-
-Current findings (data gathered, script not yet written):
-- `phpInstrumentName` (chatreporter.cpp, 50 entries) ≡ `$instruments` (servers.php, 50 entries) — identical, GUID-relevant pipelines agree on all instrument codes.
-- `CInstPictures::GetTable()` (util.cpp) diverges at indices 0 (`"None"` vs `"-"`), 1 (`"Drum Set"` vs `"Drums"`), 26 (`"Guitar+Vocal"` vs `"Guitar Vocal"`), 27 (`"Keyboard+Vocal"` vs `"Keyboard Vocal"`). UI-only — **never use for GUID computation**.
-- JamFan22 has no independent instrument lookup table in C#; `EncounterTracker.GetHash` takes whatever string it receives.
-- `phpCountryName` (chatreporter.cpp, 262 entries) ≡ `$countries` (servers.php, 262 entries) — appear identical by inspection.
-- Expected output of script: 4 instrument divergences all in util.cpp, 0 country divergences. Any unexpected divergence is a bug.
-
-**Test 2 — GUID round-trip check (needs one test client)**: Connect a Jamulus client with a known name, country, and instrument (use instrument code 1, Drum Set — the known divergence case). After connect: (a) grep JamFan22 output.log for the `/ip-allowed` call from that IP — note the `guid=` parameter; (b) call `./rpc.sh '<server>' jamulusserver/getClients` and note `name`, `countryName`, `instrumentCode`; (c) locally compute `md5(name + phpCountryName(countryId) + phpInstrumentName(instrumentCode))` using tables from `chatreporter.cpp` and verify it matches (a). Repeat with instrument code 0 (no instrument) to check the `"-"` edge case.
-
-**Test 3 — Cross-pipeline GUID join (data analysis on jamulus.live)**: Write `check_guid_join.py` on `jamulus.live` that joins `fleet-guid-ip.csv` and `census.csv` by fleet-server IP + overlapping time window (±5 minutes). Compare GUIDs row by row. A mismatch means the C++ binary and JamFan22's directory-scrape path are computing different hashes for the same player. Filter to players with a name (skip blank-name entries). **Hand off script to `claude` on `jamulus.live`** — it needs direct access to the CSV files.
-
-**Test 4 — Edge case matrix (needs a controlled client, builds on Test 2)**: Connect four clients covering the failure-mode corners: (blank name, no country, no instrument), (name only), (name + country, no instrument), (name + country + instrument code 1). For each, record the `guid=` from the `/ip-allowed` log and recompute manually.
-
-Passing criteria: Tests 1–4 all green means tables agree, round-trip is consistent, cross-pipeline join has <1% mismatch rate, and edge cases are handled identically.
-
 ## Windows client
 
 **Windows client announcement**: Once Windows client artifact is confirmed working (PCM audio + client URL filtering in place), announce to existing fleet server users via JamFan22 dynamic welcome for a limited window (~2 weeks). Decide mechanism (welcome addendum, jamulus.live page banner, or gojam chat) before implementing.

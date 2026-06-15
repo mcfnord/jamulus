@@ -48,13 +48,21 @@ server IP is inferred from the TCP connection and combined with `port` to form
 `<ip>:<port>`. Fails silently if the endpoint is unreachable.
 Hooks into server (raw message text) and client (`ChatTextReceived` signal).
 
+**Pattern list coordination**: Server builds fetch their pattern list from
+`https://jamulus.live/chat-patterns.txt` at startup (refreshed hourly). Client builds
+use the hardcoded `kPatterns[]` array at `chatreporter.cpp:40`. JamFan22 also validates
+incoming `/chat-url-client` reports against `chat-patterns.txt` as a defense-in-depth
+filter. **The two lists must be identical.** A pattern missing from `chat-patterns.txt`
+is silently dropped by JamFan22; a pattern missing from `kPatterns[]` is never reported
+by client builds. When adding a domain to either place, add it to both.
+
 Also handles `/stream` chat commands: intercepts `/stream` text, POSTs
 `{"command":"stream","port":N,"weekly":false}` to `https://jamulus.live/chat-command-server`,
 and broadcasts the response back to all connected clients.
 
 `reportClientInfo(addr, name, countryId, instrument)` fires on each `ChanInfoHasChanged`
 event. Computes GUID as MD5(name + phpCountryName(countryId) + phpInstrumentName(instrument))
-matching the ping-join Python format, then GETs `/ip-allowed/{ip}?guid=<hash>`.
+matching the ping-join Python format, then GETs `/player-identified/{ip}?serverport=...&guid=...&channelId=...&nation=...`.
 
 ### `earlier-join-notification`
 Fires a connection notification at the earliest socket step, before the full handshake
@@ -87,28 +95,36 @@ Endpoints consumed by this Jamulus fork:
 
 ## TODO
 
-- **Deploy PCM-capable binary to all fleet servers**: Once PCM audio is confirmed working end-to-end (client connects to Freiheit with AQ_RAW and negotiates uncompressed audio), run `./deploy.sh all` to push the new `jamfan` binary to all x86-64 fleet servers. Freiheit (aarch64) is already updated. Duet is not a fleet server — skip it. Do not deploy until end-to-end test passes.
+- **Deploy PCM-capable binary to all fleet servers**: Once PCM audio is confirmed working end-to-end (client connects to Freiheit with AQ_RAW and negotiates uncompressed audio), run `./deploy.sh all` to push the new `jamfan` binary to all x86-64 fleet servers. Freiheit (aarch64) is already updated. The Duet servers (7 headless ping-harvester servers on 24.199.107.192) are not fleet servers — skip them. Do not deploy until end-to-end test passes.
 
 - **Windows client**: wire chat-reporter URL detection into the GUI client build; make the blue Jamulus logo open `https://jamulus.live`. Build via GitHub Actions: `git push origin jamfan:autobuild-jamfan`, download artifact, delete remote branch.
 
-- **Update `chat-patterns.txt` on jamulus.live for JamFan22 defense-in-depth** (`/root/JamFan22/JamFan22/wwwroot/chat-patterns.txt`): two changes needed: (1) broaden the Ultimate Guitar pattern from `ultimate-guitar\.com/tab/` to `ultimate-guitar\.com/[^\s]*` to cover `/user/tab/view` and `/user/playlist/shared` paths; (2) add `https://vocal-voyage\.de/[^\s]*`. These patterns are already compiled into the client binary — this update is for the JamFan22 server-side defense-in-depth filter on `/chat-url-client`. Hand off to `claude` on `jamulus.live`.
+- **Client URL abuse monitoring in JamFan22** (C# on `jamulus.live`, must be done before wide distribution): reuse ip-allowed block logic, apply `chat-patterns.txt` server-side (defense-in-depth), rate-limit by IP, fail closed, log source IP. Details in `jamulus/TODO.md`. Hand off to `claude` on `jamulus.live`.
 
-- **Client-side URL pattern filtering** (`src/chatreporter.cpp`): DONE. Client builds load 13 patterns compiled into the binary at startup (`#else SERVER_BUNDLE` branch of `start()`); `reportIfMatch()` skips any URL that matches none of them. Server builds continue sending all URLs unfiltered. Pattern list is auditable in source — changing it requires a new binary.
+- **Windows client announcement + binary palette rollout**: announce to fleet users via welcome message once PCM + URL filtering are confirmed; publish GitHub Release for stable download URL; dismissable per-GUID banner; server binary; changelog at `jamulus.live/jamfan`. Details in `jamulus/TODO.md`.
 
-- **Client URL abuse monitoring in JamFan22** (C# on `jamulus.live`): The `/chat-url-client` endpoint will receive URLs from an unknown number of Windows client installs. Treat it like a public inbound API with the same trust model as `/ip-allowed`:
-  - **Reuse ip-allowed block logic**: if an IP is already flagged as blocked by the ip-allowed subsystem, reject its `/chat-url-client` submissions too — same "known bad" signal applies. Avoids building parallel block infrastructure.
-  - **Defense-in-depth pattern filtering**: apply `chat-patterns.txt` server-side before logging any URL, even though the C++ client also filters. Two independent checks; a malicious or unpatched client can't bypass both.
-  - **Rate limiting by IP**: cap URL submissions per IP per hour; use a short-lived cache for rate-limit decisions (analogous to ip-allowed cache TTLs).
-  - **Fail closed**: unlike ip-allowed (which fails open because a missed connection matters), `/chat-url-client` can silently drop submissions when the backend is overloaded — missing a URL is harmless.
-  - **Per-IP logging**: store source IP alongside url/timestamp for every accepted submission; surface abuse metrics in the admin log.
-  - Must be in place before the Windows client is widely distributed. Hand off to `claude` on `jamulus.live`.
+- **Propose `getClients` identification gate upstream**: After end-to-end testing, open a PR against `jamulussoftware/jamulus` for the two-line fix in `channel.h` (`IsIdentified()` getter) and `server.cpp` (`GetConCliParam` filter changed to `IsConnected() && IsIdentified()`). This is a generic correctness fix — `getClients` returning default-empty fields for channels in the pre-identification window is a bug for any RPC consumer, not just JamFan22. Unlike the JamFan features, this has no custom logic and is a clean upstream candidate.
+  - **Status**: PR submitted (draft): https://github.com/jamulussoftware/jamulus/pull/3716. Committed to `jamfan` as `bf1e951b`. **Note**: this fix addresses the timing race (unidentified client briefly visible with empty fields) but does NOT fix JamFan22's welcome self-exclusion bug — that bug is caused by JamFan22 reading wrong field names from the response (see `getClients` field name mismatch TODO below), not by timing.
 
-- **Windows client announcement**: Once the Windows client artifact is confirmed working (PCM audio + client URL filtering in place), announce availability to existing fleet server users via the JamFan22 dynamic welcome message for a limited window (e.g. 2 weeks). Message should link to the download and mention PCM audio quality. Decide announcement mechanism (welcome message addendum, jamulus.live page banner, or gojam chat) before implementing.
+- **GUID computation standing trap**: never use `CInstPictures::GetName()` for GUID computation — diverges from `phpInstrumentName` at indices 0 (`"None"` vs `"-"`), 1 (`"Drum Set"` vs `"Drums"`), 26, and 27. JamFan22's `GetClientsAsync` uses `_instrumentNames[]` (matching `phpInstrumentName`); GUID parity confirmed 2026-06-11 (92.3% match across 274 fleet join events).
 
-- **Send player name in /ip-allowed requests** (`src/chatreporter.cpp`, one line): `reportClientInfo` already has `name` in scope but doesn't send it. Add `if (!name.isEmpty()) query.addQueryItem(QStringLiteral("name"), name);` after the `guid` line. **Note**: JamFan22 already retrieves player names via `getClients` RPC at welcome time, so this C++ change is only necessary to capture names for **blocked players** (who never receive a welcome). For welcomed players, a C#-only change on JamFan22 can write names to `fleet-guid-ip.csv` without touching C++.
+- **Public RPC port — unauthenticated status API** (future): A second TCP listener on port 22224 (same number as the Jamulus UDP game port — no conflict since protocols differ). No `--jsonrpcport` or secret required; enabled by passing `--publicrpcport` flag (no argument). Operators who don't want it simply omit the flag. Because the port is well-known (always 22224/tcp), any client who knows a server's address can query it without asking the operator for a port number.
 
-- **Always send GUID in /ip-allowed requests** (`src/chatreporter.cpp`, `central-defense`): When a fleet server calls `GET /ip-allowed/{client_ip}?guid={client_guid}`, blocked connections currently omit the `guid` parameter (JamFan22 logs show `guid=-`). The GUID is available from the Jamulus protocol handshake before the check is made — it should be included regardless of outcome. Fix is in the code path that constructs the `/ip-allowed` URL. Blocked connections are the most important ones to track in `fleet-guid-ip.csv`, so this gap matters.
+  **Methods to expose on the public port** (all read-only, no privacy concern):
+  - `jamulus/getVersion` — server version
+  - `jamulus/getMode` — always `"server"` on a server binary
+  - `jamulusserver/getServerProfile` — name, city, country, welcome message, directory status (already public via directory)
+  - `jamulusserver/getRecorderStatus` — recording on/off
+  - `jamulusserver/getClients` — **omit the `address` field** (IP:port is private; name/instrument/country are already visible to session participants)
+
+  **Implementation**: `CRpcServer` gets a `HandlePublicMethod()` variant that adds to a separate `mapPublicMethodHandlers`. `ProcessMessage` checks that map before the auth gate. The public-port server is a second `CRpcServer` instance constructed with an empty secret; all methods registered on it via `HandlePublicMethod` are automatically unauthenticated. Fleet service files get `--publicrpcport` added; firewall rules open 22224/tcp to the world on each server.
 
 ## Branch strategy
 `main` tracks upstream exactly — no custom commits. `jamfan` is rebased onto `main`
 (history rewrite is acceptable). Pull upstream into `main`, then `git rebase main jamfan`.
+
+## ARM64 deploy pitfalls
+
+**Never rsync the local `Jamulus` binary to ARM64 hosts.** The local build produces an x86-64 binary; rsyncing it to Turin/Freiheit/Rising without `--exclude='Jamulus'` overwrites the correct aarch64 binary with a broken one (silent failure — rsync succeeds, `sudo mv` succeeds, service crashes with "Exec format error"). Always add `--exclude='Jamulus'` when rsyncing sources to ARM64 build hosts.
+
+**Turin (Oracle Linux 9) additionally requires `qt5-linguist`** for `lrelease`. Without it, sequential `make` fails on the translation target before the linker runs and no binary is produced. Install once with `sudo dnf install -y qt5-linguist`; already done as of 2026-06-08.

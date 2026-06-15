@@ -1386,6 +1386,15 @@ void CServer::SendChatToChannel ( const int iChanNum, const QString& strMsg )
         vecChannels[iChanNum].CreateChatTextMes ( strMsg );
 }
 
+void CServer::BroadcastChatMessage ( const QString& strMsg )
+{
+    for ( int i = 0; i < iMaxNumChannels; i++ )
+    {
+        if ( vecChannels[i].IsConnected() )
+            vecChannels[i].CreateChatTextMes ( strMsg );
+    }
+}
+
 void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, const QString& strChatText )
 {
     if ( strChatText.trimmed().startsWith ( QStringLiteral ( "/stream" ) ) )
