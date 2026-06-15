@@ -11,5 +11,9 @@
   { "name": "Sindone",         "host": "92.4.218.204",   "user": "opc",    "lang": "Italian", "arch": "aarch64" },
   { "name": "Valdo",           "host": "92.4.218.204",   "user": "opc",    "lang": "Italian", "arch": "aarch64", "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 },
   { "name": "Louvre",          "host": "51.44.19.219",   "user": "ubuntu", "lang": "French"  },
-  { "name": "Cave",            "host": "51.44.19.219",   "user": "ubuntu", "lang": "French",  "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 }
+  { "name": "Cave",            "host": "51.44.19.219",   "user": "ubuntu", "lang": "French",  "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 },
+  { "name": "Rising",          "host": "132.226.27.144", "user": "ubuntu", "lang": "English", "arch": "aarch64" },
+  { "name": "Saguaro",         "host": "132.226.27.144", "user": "ubuntu", "lang": "English", "arch": "aarch64", "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 },
+  { "name": "Big Ben",         "host": "18.170.218.139", "user": "ubuntu", "lang": "English", "arch": "aarch64" },
+  { "name": "Ronnie Scott's",  "host": "18.170.218.139", "user": "ubuntu", "lang": "English", "arch": "aarch64", "service": "jamulus-jazz", "port": 22225, "rpcport": 9998 }
 ]
