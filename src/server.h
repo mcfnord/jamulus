@@ -128,7 +128,6 @@ public:
                           CVector<CChannelCoreInfo>& vecChanInfo );
 
     void CreateCLServerListReqVerAndOSMes ( const CHostAddress& InetAddr ) { ConnLessProtocol.CreateCLReqVersionAndOSMes ( InetAddr ); }
-    void CreateCLReqRawAudioSupportedMes ( const CHostAddress& InetAddr ) { ConnLessProtocol.CreateCLReqRawAudioSupportedMes ( InetAddr ); }
 
     // IPv6 Enabled
     bool IsIPv6Enabled() { return bEnableIPv6; }
@@ -162,7 +161,6 @@ public:
 
     void SetExternalRecordingBanner ( bool bActive );
     bool GetExternalRecordingBanner() { return m_bExternalRecordingBanner; }
-
 
     void    SetWelcomeMessage ( const QString& strNWelcMess );
     QString GetWelcomeMessage() { return strWelcomeMessage; }
@@ -334,7 +332,7 @@ protected:
     ChatReporter*   m_chatReporter   = nullptr;
     bool            m_vecChanInfoReported[MAX_NUM_CHANNELS] = {};
 
-    bool   m_bExternalRecordingBanner = false;
+    bool m_bExternalRecordingBanner = false;
 
 signals:
     void Started();
@@ -348,7 +346,6 @@ signals:
                       const CVector<int16_t> vecsData );
 
     void CLVersionAndOSReceived ( CHostAddress InetAddr, COSUtil::EOpSystemType eOSType, QString strVersion );
-    void CLRawAudioSupportedReceived ( CHostAddress InetAddr );
 
     // pass through from jam controller
     void RestartRecorder();
@@ -389,17 +386,7 @@ public slots:
 
     void OnCLReqVersionAndOS ( CHostAddress InetAddr ) { ConnLessProtocol.CreateCLVersionAndOSMes ( InetAddr ); }
 
-    void OnCLReqRawAudioSupported ( CHostAddress InetAddr )
-    {
-        if ( !bDisableRaw )
-        {
-            ConnLessProtocol.CreateCLRawAudioSupportedMes ( InetAddr );
-        }
-    }
-
     void OnCLReqConnClientsList ( CHostAddress InetAddr ) { ConnLessProtocol.CreateCLConnClientsListMes ( InetAddr, CreateChannelList() ); }
-
-    void OnCLReqChannelLevelList ( CHostAddress InetAddr ) { ConnLessProtocol.CreateCLChannelLevelListMes ( InetAddr, vecChannelLevels, GetNumberOfConnectedClients() ); }
 
     void OnCLRegisterServerReceived ( CHostAddress InetAddr, CHostAddress LInetAddr, CServerCoreInfo ServerInfo )
     {

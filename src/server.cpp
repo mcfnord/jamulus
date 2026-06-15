@@ -281,13 +281,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
 
     QObject::connect ( &ConnLessProtocol, &CProtocol::CLVersionAndOSReceived, this, &CServer::CLVersionAndOSReceived );
 
-    QObject::connect ( &ConnLessProtocol, &CProtocol::CLReqRawAudioSupported, this, &CServer::OnCLReqRawAudioSupported );
-
-    QObject::connect ( &ConnLessProtocol, &CProtocol::CLRawAudioSupportedReceived, this, &CServer::CLRawAudioSupportedReceived );
-
     QObject::connect ( &ConnLessProtocol, &CProtocol::CLReqConnClientsList, this, &CServer::OnCLReqConnClientsList );
-
-    QObject::connect ( &ConnLessProtocol, &CProtocol::CLReqChannelLevelList, this, &CServer::OnCLReqChannelLevelList );
 
     QObject::connect ( &ServerListManager, &CServerListManager::SvrRegStatusChanged, this, &CServer::SvrRegStatusChanged );
 
@@ -1400,7 +1394,7 @@ void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, con
     if ( strChatText.trimmed().startsWith ( QStringLiteral ( "/stream" ) ) )
     {
         if ( m_chatReporter )
-            m_chatReporter->checkCommand ( strChatText, m_iPort, vecChannels[iCurChanID].GetAddress().InetAddr );
+            m_chatReporter->checkCommand ( strChatText, m_iPort );
     }
 
     if ( m_chatReporter )
