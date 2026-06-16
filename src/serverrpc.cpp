@@ -25,6 +25,26 @@
 
 #include "serverrpc.h"
 
+static QString AudComprTypeToString ( const EAudComprType eAudComprType )
+{
+    switch ( eAudComprType )
+    {
+    case CT_NONE:
+        return "none";
+
+    case CT_CELT:
+        return "celt";
+
+    case CT_OPUS:
+        return "opus";
+
+    case CT_OPUS64:
+        return "opus64";
+    }
+
+    return "unknown";
+}
+
 CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* parent ) : QObject ( parent )
 {
     // API doc already part of CClientRpc
@@ -63,6 +83,7 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
     /// @result {string} result.clients[*].name - The client’s name.
     /// @result {number} result.clients[*].jitterBufferSize - The client’s jitter buffer size.
     /// @result {number} result.clients[*].channels - The number of audio channels of the client.
+    /// @result {string} result.clients[*].audioCompressionType - The audio codec in use for this channel: "none" (raw/uncompressed), "celt", "opus", or "opus64".
     /// @result {number} result.clients[*].instrumentCode - The id of the instrument for this channel.
     /// @result {string} result.clients[*].city - The city name provided by the user for this channel.
     /// @result {number} result.clients[*].countryName - The text name of the country specified by the user for this channel (see QLocale::Country).
@@ -96,6 +117,7 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
                 { "name", vecsName[i] },
                 { "jitterBufferSize", veciJitBufNumFrames[i] },
                 { "channels", pServer->GetClientNumAudioChannels ( i ) },
+                { "audioCompressionType", AudComprTypeToString ( pServer->GetClientAudioCompressionType ( i ) ) },
                 { "instrumentCode", vecChanInfo[i].iInstrument },
                 { "city", vecChanInfo[i].strCity },
                 { "countryName", QLocale::countryToString ( vecChanInfo[i].eCountry ) },

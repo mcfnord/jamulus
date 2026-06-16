@@ -131,6 +131,8 @@ public:
     // GUI settings ------------------------------------------------------------
     int GetClientNumAudioChannels ( const int iChanNum ) { return vecChannels[iChanNum].GetNumAudioChannels(); }
 
+    EAudComprType GetClientAudioCompressionType ( const int iChanNum ) { return vecChannels[iChanNum].GetAudioCompressionType(); }
+
     void           SetDirectoryType ( const EDirectoryType eNCSAT ) { ServerListManager.SetDirectoryType ( eNCSAT ); }
     EDirectoryType GetDirectoryType() { return ServerListManager.GetDirectoryType(); }
     bool           IsDirectory() { return ServerListManager.IsDirectory(); }
