@@ -135,6 +135,8 @@ public:
     // GUI settings ------------------------------------------------------------
     int GetClientNumAudioChannels ( const int iChanNum ) { return vecChannels[iChanNum].GetNumAudioChannels(); }
 
+    EAudComprType GetClientAudioCompressionType ( const int iChanNum ) { return vecChannels[iChanNum].GetAudioCompressionType(); }
+
     void           SetDirectoryType ( const EDirectoryType eNCSAT ) { ServerListManager.SetDirectoryType ( eNCSAT ); }
     EDirectoryType GetDirectoryType() { return ServerListManager.GetDirectoryType(); }
     bool           IsDirectory() { return ServerListManager.IsDirectory(); }
@@ -387,6 +389,8 @@ public slots:
     void OnCLReqVersionAndOS ( CHostAddress InetAddr ) { ConnLessProtocol.CreateCLVersionAndOSMes ( InetAddr ); }
 
     void OnCLReqConnClientsList ( CHostAddress InetAddr ) { ConnLessProtocol.CreateCLConnClientsListMes ( InetAddr, CreateChannelList() ); }
+
+    void OnCLReqChannelLevelList ( CHostAddress InetAddr ) { ConnLessProtocol.CreateCLChannelLevelListMes ( InetAddr, vecChannelLevels, GetNumberOfConnectedClients() ); }
 
     void OnCLRegisterServerReceived ( CHostAddress InetAddr, CHostAddress LInetAddr, CServerCoreInfo ServerInfo )
     {
