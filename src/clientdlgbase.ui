@@ -495,7 +495,7 @@
             <item>
              <widget class="QCheckBox" name="chbLocalMute">
               <property name="text">
-               <string>&amp;Mute Myself</string>
+               <string>&amp;Mute HiBot</string>
               </property>
              </widget>
             </item>

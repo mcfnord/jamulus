@@ -922,6 +922,60 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
 {
     // update mixer board with the additional client infos
     MainMixerBoard->ApplyNewConClientList ( vecChanInfo );
+
+    // HiBot: build current GUID set and collect non-blank country votes
+    QSet<QString> newGuids;
+    QJsonArray    countryVotes;
+    QMap<QString, QString> guidToName;
+
+    for ( int i = 0; i < vecChanInfo.Size(); i++ )
+    {
+        const CChannelInfo& ch    = vecChanInfo[i];
+        QByteArray          input = ( ch.strName +
+                             QString ( phpCountryName ( static_cast<int> ( ch.eCountry ) ) ) +
+                             QString ( phpInstrumentName ( ch.iInstrument ) ) ).toUtf8();
+        QString guid = QCryptographicHash::hash ( input, QCryptographicHash::Md5 ).toHex();
+        newGuids.insert ( guid );
+        guidToName[guid] = ch.strName;
+        if ( static_cast<int> ( ch.eCountry ) != 0 )
+            countryVotes.append ( static_cast<int> ( ch.eCountry ) );
+    }
+
+    if ( !m_hibotReady )
+    {
+        // first update after connecting: snapshot existing players, no greetings
+        m_hibotReady = true;
+    }
+    else if ( !chbLocalMute->isChecked() )
+    {
+        for ( const QString& guid : newGuids )
+        {
+            if ( !m_knownGuids.contains ( guid ) && !guidToName[guid].isEmpty() )
+            {
+                if ( !m_hibotNam )
+                    m_hibotNam = new QNetworkAccessManager ( this );
+
+                QJsonObject body;
+                body["guid"]         = guid;
+                body["serverAddr"]   = m_hibotServerAddr;
+                body["countryVotes"] = countryVotes;
+
+                QNetworkRequest req ( QUrl ( "https://jamulus.live/hibot/arrival" ) );
+                req.setHeader ( QNetworkRequest::ContentTypeHeader, "application/json" );
+                req.setHeader ( QNetworkRequest::UserAgentHeader, "Jamulus-HiBot/1.0" );
+
+                QNetworkReply* reply = m_hibotNam->post ( req, QJsonDocument ( body ).toJson ( QJsonDocument::Compact ) );
+                QObject::connect ( reply, &QNetworkReply::finished, this, [this, reply]() {
+                    const QString msg = QString::fromUtf8 ( reply->readAll() ).trimmed();
+                    if ( !msg.isEmpty() )
+                        pClient->CreateChatTextMes ( msg );
+                    reply->deleteLater();
+                } );
+            }
+        }
+    }
+
+    m_knownGuids = newGuids;
 }
 
 void CClientDlg::OnNumClientsChanged ( int iNewNumClients )
@@ -1114,7 +1168,7 @@ void CClientDlg::OnTimerSigMet()
         chb->setCheckState ( pSettings->bEnableFeedbackDetection ? Qt::Checked : Qt::Unchecked );
         QMessageBox msgbox;
         msgbox.setText ( tr ( "Audio feedback or loud signal detected.\n\n"
-                              "We muted your channel and activated 'Mute Myself'. Please solve "
+                              "We muted your channel and activated 'Mute HiBot'. Please solve "
                               "the feedback issue first and unmute yourself afterwards." ) );
         msgbox.setIcon ( QMessageBox::Icon::Warning );
         msgbox.addButton ( QMessageBox::Ok );
@@ -1243,6 +1297,9 @@ void CClientDlg::OnCLPingTimeWithNumClientsReceived ( CHostAddress InetAddr, int
 
 void CClientDlg::Connect ( const QString& strSelectedAddress, const QString& strMixerBoardLabel )
 {
+    m_hibotReady      = false;
+    m_hibotServerAddr = strSelectedAddress;
+
     // set address and check if address is valid
     if ( pClient->SetServerAddr ( strSelectedAddress ) )
     {
@@ -1291,6 +1348,9 @@ void CClientDlg::Connect ( const QString& strSelectedAddress, const QString& str
 
 void CClientDlg::Disconnect()
 {
+    m_hibotReady = false;
+    m_knownGuids.clear();
+
     // only stop client if currently running, in case we received
     // the stopped message, the client is already stopped but the
     // connect/disconnect button and other GUI controls must be

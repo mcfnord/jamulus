@@ -56,6 +56,15 @@
 #include "connectdlg.h"
 #include "analyzerconsole.h"
 #include "ui_clientdlgbase.h"
+#include "jamuluslookups.h"
+#include <QSet>
+#include <QCryptographicHash>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #if defined( Q_OS_MACOS )
 #    include "mac/badgelabel.h"
 #endif
@@ -105,8 +114,12 @@ protected:
     CClient*         pClient;
     CClientSettings* pSettings;
 
-    int            iClients;
-    bool           bConnected;
+    int                    iClients;
+    QSet<QString>          m_knownGuids;
+    bool                   m_hibotReady = false;
+    QString                m_hibotServerAddr;
+    QNetworkAccessManager* m_hibotNam   = nullptr;
+    bool                   bConnected;
     bool           bConnectDlgWasShown;
     bool           bDetectFeedback;
     bool           bEnableIPv6;
