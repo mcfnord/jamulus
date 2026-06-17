@@ -275,6 +275,14 @@ CClientDlg::CClientDlg ( CClient*         pNCliP,
     TimerCheckAudioDeviceOk.setSingleShot ( true ); // only check once after connection
     TimerDetectFeedback.setSingleShot ( true );
 
+    // HiBot: load operator secret (file gates LLM calls at jamulus.live)
+    {
+        const QString secretPath = QStandardPaths::writableLocation ( QStandardPaths::AppConfigLocation ) + "/hibot-secret";
+        QFile         f ( secretPath );
+        if ( f.open ( QIODevice::ReadOnly ) )
+            m_hibotSecret = QString::fromUtf8 ( f.readAll() ).trimmed();
+    }
+
     // Connect on startup ------------------------------------------------------
     if ( !strConnOnStartupAddress.isEmpty() )
     {
@@ -950,7 +958,7 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
     {
         for ( const QString& guid : newGuids )
         {
-            if ( !m_knownGuids.contains ( guid ) && !guidToName[guid].isEmpty() )
+            if ( !m_knownGuids.contains ( guid ) && !guidToName[guid].isEmpty() && !m_hibotSecret.isEmpty() )
             {
                 if ( !m_hibotNam )
                     m_hibotNam = new QNetworkAccessManager ( this );
@@ -963,6 +971,7 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
                 QNetworkRequest req ( QUrl ( "https://jamulus.live/hibot/arrival" ) );
                 req.setHeader ( QNetworkRequest::ContentTypeHeader, "application/json" );
                 req.setHeader ( QNetworkRequest::UserAgentHeader, "Jamulus-HiBot/1.0" );
+                req.setRawHeader ( "X-HiBot-Secret", m_hibotSecret.toUtf8() );
 
                 QNetworkReply* reply = m_hibotNam->post ( req, QJsonDocument ( body ).toJson ( QJsonDocument::Compact ) );
                 QObject::connect ( reply, &QNetworkReply::finished, this, [this, reply]() {
