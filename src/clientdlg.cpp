@@ -977,7 +977,14 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
                 QObject::connect ( reply, &QNetworkReply::finished, this, [this, reply]() {
                     const QString msg = QString::fromUtf8 ( reply->readAll() ).trimmed();
                     if ( !msg.isEmpty() )
+                    {
+                        const QString savedName = pClient->ChannelInfo.strName;
+                        pClient->ChannelInfo.strName = "HiBot";
+                        pClient->SetRemoteInfo();
                         pClient->CreateChatTextMes ( msg );
+                        pClient->ChannelInfo.strName = savedName;
+                        pClient->SetRemoteInfo();
+                    }
                     reply->deleteLater();
                 } );
             }
