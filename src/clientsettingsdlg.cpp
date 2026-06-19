@@ -588,6 +588,12 @@ CClientSettingsDlg::CClientSettingsDlg ( CClient* pNCliP, CClientSettings* pNSet
     // add an entry for all known instruments
     for ( int iCurInst = 0; iCurInst < CInstPictures::GetNumAvailableInst(); iCurInst++ )
     {
+        // exclude the "None" entry since it is added after the sorting
+        if ( iCurInst == 0 )
+        {
+            continue;
+        }
+
         // create a combo box item with text, image and background color
         QColor InstrColor;
 
@@ -619,11 +625,19 @@ CClientSettingsDlg::CClientSettingsDlg ( CClient* pNCliP, CClientSettings* pNSet
         }
 
         InstrColor.setAlpha ( 10 );
-        pcbxInstrument->setItemData ( iCurInst, InstrColor, Qt::BackgroundRole );
+        pcbxInstrument->setItemData ( pcbxInstrument->count() - 1, InstrColor, Qt::BackgroundRole );
     }
 
     // sort the items in alphabetical order
     pcbxInstrument->model()->sort ( 0 );
+
+    // the "None" instrument is the very first item
+    {
+        QColor InstrColor ( Qt::blue );
+        InstrColor.setAlpha ( 10 );
+        pcbxInstrument->insertItem ( 0, QIcon ( CInstPictures::GetResourceReference ( 0 ) ), CInstPictures::GetName ( 0 ), 0 );
+        pcbxInstrument->setItemData ( 0, InstrColor, Qt::BackgroundRole );
+    }
 
     // Country flag icons combo box --------------------------------------------
     // add an entry for all known country flags
