@@ -19,6 +19,7 @@ public:
 
     void start();
     void reportIfMatch(const QString& text);
+    void reportSongIfMatch(const QString& rawText);
     void checkCommand(const QString& text, int port, const QHostAddress& clientAddr = QHostAddress());
     void reportClientInfo(const QHostAddress& addr, const QString& name, int countryId, int instrument, int channelId);
     void setRpcPort(quint16 port) { m_rpcPort = port; }
@@ -34,6 +35,7 @@ private slots:
 private:
     void fetchPatterns();
     void postUrl(const QString& url);
+    void postSong(const QString& title);
 
     QUrl m_patternUrl;
     QUrl m_reportUrl;

@@ -203,6 +203,41 @@ void ChatReporter::reportClientInfo(const QHostAddress& addr, const QString& nam
     connect(reply, &QNetworkReply::finished, reply, &QNetworkReply::deleteLater);
 }
 
+void ChatReporter::reportSongIfMatch(const QString& rawText)
+{
+    // Matches "<title> – Dm" or "<title> — F#m" (en/em dash only; hyphen-minus excluded to avoid false positives)
+    static const QRegularExpression songRe(
+        QStringLiteral(R"(^(.*\S)\s*[–—]\s*[A-G][#b]?m?\s*$)"));
+
+    QRegularExpressionMatch m = songRe.match(rawText.trimmed());
+    if (!m.hasMatch())
+        return;
+
+    const QString title = m.captured(1).trimmed();
+    if (title.isEmpty())
+        return;
+
+    postSong(title);
+}
+
+void ChatReporter::postSong(const QString& title)
+{
+    qCInfo(lcChatReporter) << "reporting song:" << title;
+
+    static const QUrl songUrl(QStringLiteral("https://jamulus.live/chat-song-server"));
+    QNetworkRequest req(songUrl);
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Jamulus-ChatReporter/1.0"));
+
+    QJsonObject body;
+    body[QStringLiteral("title")] = title;
+    body[QStringLiteral("port")]  = m_port;
+    QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
+
+    QNetworkReply* reply = m_nam->post(req, payload);
+    connect(reply, &QNetworkReply::finished, reply, &QNetworkReply::deleteLater);
+}
+
 void ChatReporter::postUrl(const QString& url)
 {
     qCInfo(lcChatReporter) << "reporting url:" << url;

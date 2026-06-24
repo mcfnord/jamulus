@@ -1393,12 +1393,15 @@ void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, con
             m_chatReporter->checkCommand ( strChatText, m_iPort );
     }
 
-    if ( m_chatReporter )
-        m_chatReporter->reportIfMatch ( strChatText );
-
     // Create message which is sent to all connected clients -------------------
     // get client name
     QString ChanName = vecChannels[iCurChanID].GetName();
+
+    if ( m_chatReporter )
+    {
+        m_chatReporter->reportIfMatch ( strChatText );
+        m_chatReporter->reportSongIfMatch ( strChatText );
+    }
 
     // add time and name of the client at the beginning of the message text and
     // use different colors

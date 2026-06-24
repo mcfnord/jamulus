@@ -1,19 +1,13 @@
 #!/usr/bin/env bash
 # Usage: ./deploy.sh [<server-name-or-ip> | all]
-# Deploys the built Jamulus binary to one or all fleet servers in fleet.json.
-# Build first: qmake "CONFIG+=headless" Jamulus.pro && make -j$(nproc)
+# x86-64 servers: builds locally, scps binary, restarts.
+# aarch64 servers: rsyncs sources, builds natively on host, restarts.
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
 FLEET="fleet.json"
 BINARY="./Jamulus"
-
-if [[ ! -f "$BINARY" ]]; then
-  echo "No binary at $BINARY — build first:"
-  echo "  qmake \"CONFIG+=headless\" Jamulus.pro && make -j\$(nproc)"
-  exit 1
-fi
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <server-name-or-ip | all>"
@@ -22,14 +16,23 @@ if [[ $# -lt 1 ]]; then
   python3 -c "
 import json
 for s in json.load(open('$FLEET')):
-    print(f\"  {s['name']:22s}  {s['host']:18s}  ({s['user']})\")
+    arch = s.get('arch', 'x86_64')
+    print(f\"  {s['name']:22s}  {s['host']:18s}  ({s['user']})  [{arch}]\")
 "
   exit 1
 fi
 
 TARGET="$1"
 
-# Emit "host user" pairs for the target (or all)
+# Increment build rev and format as two hex digits (wraps at 256)
+REV_FILE="jamfan-rev"
+REV=$(( $(cat "$REV_FILE" 2>/dev/null || echo "0") + 1 ))
+printf '%d\n' "$REV" > "$REV_FILE"
+HEX_REV=$(printf '%02x' "$(( REV % 256 ))")
+JAMFAN_VERSION="JAMFAN-${HEX_REV}"
+
+# Output tab-separated: host user service arch gcc13_fix swapon make_jobs qmake_cmd name
+# name is last so spaces in server names are handled correctly by bash read.
 readarray -t PAIRS < <(python3 -c "
 import json, sys
 fleet = json.load(open('$FLEET'))
@@ -41,23 +44,117 @@ if not servers:
     print(f'No server matching: {target}', file=sys.stderr)
     sys.exit(1)
 for s in servers:
-    if s.get('arch') == 'aarch64':
-        print(f\"SKIP {s['name']} (aarch64 — build natively on host)\", file=sys.stderr)
-        continue
-    service = s.get('service', 'jamulus-headless')
-    print(s['host'], s['user'], service, s['name'])
+    arch     = s.get('arch', 'x86_64')
+    service  = s.get('service', 'jamulus-headless')
+    gcc13    = '1' if s.get('gcc13_fix', False) else '0'
+    swapon   = s.get('swapon', '-')
+    jobs     = str(s.get('make_jobs', 0))   # 0 = use nproc on remote
+    qmake    = s.get('qmake_cmd', 'qmake')
+    print('\t'.join([s['host'], s['user'], service, arch, gcc13, swapon, jobs, qmake, s['name']]))
 " "$TARGET")
 
+echo "==> Build rev: $JAMFAN_VERSION"
+
+# Build x86-64 binary locally once if any x86-64 targets in this run
+HAS_X86=$(python3 -c "
+import json, sys
+fleet = json.load(open('$FLEET'))
+target = sys.argv[1]
+servers = fleet if target == 'all' else [s for s in fleet if s['name'].lower() == target.lower() or s['host'] == target]
+print('1' if any(s.get('arch', 'x86_64') == 'x86_64' for s in servers) else '0')
+" "$TARGET")
+
+if [[ "$HAS_X86" == "1" ]]; then
+    echo "==> Building x86-64 (${JAMFAN_VERSION})"
+    qmake "CONFIG+=headless" "VERSION=${JAMFAN_VERSION}" Jamulus.pro > /dev/null
+    make -j$(nproc)
+    echo "    x86-64 build done."
+fi
+
+declare -A BUILT_HOSTS
+
 for pair in "${PAIRS[@]}"; do
-  read -r host user service name <<< "$pair"
+  IFS=$'\t' read -r host user service arch gcc13 swapon jobs qmake name <<< "$pair"
   echo "==> $name ($user@$host) [$service]"
   ssh-keyscan -H "$host" >> ~/.ssh/known_hosts 2>/dev/null
-  scp -i ~/.ssh/id_ed25519 "$BINARY" "$user@$host:/tmp/jamulus-jamfan"
-  ssh -i ~/.ssh/id_ed25519 "$user@$host" \
-    "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan \
-     && sudo chmod +x /usr/bin/jamulus-jamfan \
-     && sudo systemctl restart $service"
-  echo "    done."
+
+  if [[ "$arch" == "aarch64" ]]; then
+    if [[ -z "${BUILT_HOSTS[$host]:-}" ]]; then
+      # Pre-flight: refuse to build if any service on this host has active clients.
+      # A native build saturates the CPU and causes audio dropouts for live sessions.
+      # Checks all RPC ports on this host, not just the service being deployed.
+      rpc_ports=$(python3 -c "
+import json
+fleet = json.load(open('$FLEET'))
+print(','.join(str(s.get('rpcport', 9999)) for s in fleet if s['host'] == '$host'))
+")
+      active_check=$(ssh -i ~/.ssh/id_ed25519 "$user@$host" python3 <<PYCHECK || true
+import socket, json
+active = []
+for port in [int(p) for p in '${rpc_ports}'.split(',') if p]:
+    try:
+        s = socket.socket(); s.connect(('127.0.0.1', port)); s.settimeout(3)
+        secret = open('/secret.txt').read().strip()
+        def rpc(m, p={}):
+            s.sendall((json.dumps({'id':1,'jsonrpc':'2.0','method':m,'params':p})+'\n').encode())
+            return json.loads(s.recv(4096))
+        rpc('jamulus/apiAuth', {'secret': secret})
+        n = len(rpc('jamulusserver/getClients').get('result',{}).get('clients',[]))
+        if n > 0:
+            active.append(f'port {port}: {n} client(s)')
+        s.close()
+    except:
+        pass
+print('\n'.join(active))
+PYCHECK
+)
+      if [[ -n "$active_check" ]]; then
+        echo "    SKIPPED $host — active sessions detected, will not build while live:"
+        echo "$active_check" | sed 's/^/      /'
+        echo "    Re-run deploy for $name when quiet."
+        continue
+      fi
+
+      BUILT_HOSTS[$host]=1
+      echo "    rsyncing sources to $host ..."
+      rsync -a \
+        --exclude='.git' --exclude='*.o' --exclude='*.lo' --exclude='*.a' \
+        --exclude='release/' --exclude='Jamulus' \
+        --exclude='libs/opus/.libs/' --exclude='libs/opus/autom4te.cache/' \
+        -e "ssh -i ~/.ssh/id_ed25519" \
+        ./ "$user@$host:/tmp/jamulus-build/"
+      echo "    building natively on $host (takes a few minutes) ..."
+      # Generate and pipe a build script; Python handles escaping cleanly.
+      python3 - "$gcc13" "$swapon" "$jobs" "$qmake" "$JAMFAN_VERSION" <<'PYEOF' | ssh -i ~/.ssh/id_ed25519 "$user@$host" bash
+import sys
+gcc13, swapon, jobs, qmake, jamfan_version = sys.argv[1:]
+lines = ['set -euo pipefail', 'cd /tmp/jamulus-build']
+if swapon != '-':
+    lines.append(f'sudo swapon {swapon} 2>/dev/null || true')
+lines.append(f'{qmake} "CONFIG+=headless" "VERSION={jamfan_version}" Jamulus.pro')
+if gcc13 == '1':
+    # GCC 13 / Qt5 moc can't parse _GLIBCXX_VISIBILITY; strip it from moc_predefs.h.
+    lines += [
+        'mkdir -p release',
+        'make -f Makefile.Release release/moc_predefs.h',
+        r'printf "\n#undef _GLIBCXX_VISIBILITY\n#define _GLIBCXX_VISIBILITY(V)\n" >> release/moc_predefs.h',
+    ]
+lines.append('make -j1' if jobs == '1' else 'make -j$(nproc)')
+lines += ['sudo mv Jamulus /usr/bin/jamulus-jamfan', 'sudo chmod +x /usr/bin/jamulus-jamfan']
+print('\n'.join(lines))
+PYEOF
+    fi
+    ssh -i ~/.ssh/id_ed25519 "$user@$host" "sudo systemctl restart $service"
+    echo "    done."
+
+  else
+    scp -i ~/.ssh/id_ed25519 "$BINARY" "$user@$host:/tmp/jamulus-jamfan"
+    ssh -i ~/.ssh/id_ed25519 "$user@$host" \
+      "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan \
+       && sudo chmod +x /usr/bin/jamulus-jamfan \
+       && sudo systemctl restart $service"
+    echo "    done."
+  fi
 done
 
 # Keep jamfan22's fleet-server-ips.txt in sync with fleet.json
