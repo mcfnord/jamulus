@@ -67,7 +67,11 @@ print('1' if any(s.get('arch', 'x86_64') == 'x86_64' for s in servers) else '0')
 if [[ "$HAS_X86" == "1" ]]; then
     echo "==> Building x86-64 (${JAMFAN_VERSION})"
     qmake "CONFIG+=headless" "JAMFAN_REV=${HEX_REV}" Jamulus.pro > /dev/null
-    make clean > /dev/null 2>&1 || true
+    current_ver=$(strings ./Jamulus 2>/dev/null | grep -o 'JAMFAN-[0-9a-f][0-9a-f]' | head -1 || echo "")
+    if [[ "$current_ver" != "JAMFAN-${HEX_REV}" ]]; then
+        echo "    version changed (${current_ver} → JAMFAN-${HEX_REV}), clean rebuild"
+        make clean > /dev/null 2>&1 || true
+    fi
     make -j$(nproc)
     echo "    x86-64 build done."
 fi
