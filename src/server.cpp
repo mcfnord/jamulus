@@ -466,12 +466,6 @@ void CServer::OnNewConnection ( int iChID, int iTotChans, CHostAddress RecHostAd
     // must be the first message to be sent for a new connection)
     vecChannels[iChID].CreateClientIDMes ( iChID );
 
-    // if not disabled, inform the client that the server supports raw (uncompressed) audio
-    if ( !bDisableRaw )
-    {
-        vecChannels[iChID].CreateRawAudioSupportedMes();
-    }
-
     // Send an empty channel list in order to force clients to reset their
     // audio mixer state. This is required to trigger clients to re-send their
     // gain levels upon reconnecting after server restarts.
