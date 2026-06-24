@@ -77,6 +77,7 @@ if [[ "$HAS_X86" == "1" ]]; then
 fi
 
 declare -A BUILT_HOSTS
+ARM64_U24_BINARY=""   # path to cached ubuntu24/aarch64 binary for cross-deploy
 
 for pair in "${PAIRS[@]}"; do
   IFS=$'\t' read -r host user service arch gcc13 swapon jobs qmake name <<< "$pair"
@@ -85,15 +86,23 @@ for pair in "${PAIRS[@]}"; do
 
   if [[ "$arch" == "aarch64" ]]; then
     if [[ -z "${BUILT_HOSTS[$host]:-}" ]]; then
-      # Pre-flight: refuse to build if any service on this host has active clients.
-      # A native build saturates the CPU and causes audio dropouts for live sessions.
-      # Checks all RPC ports on this host, not just the service being deployed.
-      rpc_ports=$(python3 -c "
+      if [[ "$gcc13" == "1" && -n "$ARM64_U24_BINARY" ]]; then
+        # Cross-deploy: a binary built on any ubuntu24/aarch64 host runs on all others.
+        echo "    cross-deploying ubuntu24/aarch64 binary (no build needed) ..."
+        scp -i ~/.ssh/id_ed25519 "$ARM64_U24_BINARY" "$user@$host:/tmp/jamulus-jamfan"
+        ssh -i ~/.ssh/id_ed25519 "$user@$host" \
+            "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan && sudo chmod +x /usr/bin/jamulus-jamfan"
+        BUILT_HOSTS[$host]=1
+      else
+        # Pre-flight: refuse to build if any service on this host has active clients.
+        # A native build saturates the CPU and causes audio dropouts for live sessions.
+        # Checks all RPC ports on this host, not just the service being deployed.
+        rpc_ports=$(python3 -c "
 import json
 fleet = json.load(open('$FLEET'))
 print(','.join(str(s.get('rpcport', 9999)) for s in fleet if s['host'] == '$host'))
 ")
-      active_check=$(ssh -i ~/.ssh/id_ed25519 "$user@$host" python3 <<PYCHECK || true
+        active_check=$(ssh -i ~/.ssh/id_ed25519 "$user@$host" python3 <<PYCHECK || true
 import socket, json
 active = []
 for port in [int(p) for p in '${rpc_ports}'.split(',') if p]:
@@ -113,24 +122,24 @@ for port in [int(p) for p in '${rpc_ports}'.split(',') if p]:
 print('\n'.join(active))
 PYCHECK
 )
-      if [[ -n "$active_check" ]]; then
-        echo "    SKIPPED $host — active sessions detected, will not build while live:"
-        echo "$active_check" | sed 's/^/      /'
-        echo "    Re-run deploy for $name when quiet."
-        continue
-      fi
+        if [[ -n "$active_check" ]]; then
+          echo "    SKIPPED $host — active sessions detected, will not build while live:"
+          echo "$active_check" | sed 's/^/      /'
+          echo "    Re-run deploy for $name when quiet."
+          continue
+        fi
 
-      BUILT_HOSTS[$host]=1
-      echo "    rsyncing sources to $host ..."
-      rsync -a \
-        --exclude='.git' --exclude='*.o' --exclude='*.lo' --exclude='*.a' \
-        --exclude='release/' --exclude='Jamulus' \
-        --exclude='libs/opus/.libs/' --exclude='libs/opus/autom4te.cache/' \
-        -e "ssh -i ~/.ssh/id_ed25519" \
-        ./ "$user@$host:/tmp/jamulus-build/"
-      echo "    building natively on $host (takes a few minutes) ..."
-      # Generate and pipe a build script; Python handles escaping cleanly.
-      python3 - "$gcc13" "$swapon" "$jobs" "$qmake" "$HEX_REV" <<'PYEOF' | ssh -i ~/.ssh/id_ed25519 "$user@$host" bash
+        BUILT_HOSTS[$host]=1
+        echo "    rsyncing sources to $host ..."
+        rsync -a \
+          --exclude='.git' --exclude='*.o' --exclude='*.lo' --exclude='*.a' \
+          --exclude='release/' --exclude='Jamulus' \
+          --exclude='libs/opus/.libs/' --exclude='libs/opus/autom4te.cache/' \
+          -e "ssh -i ~/.ssh/id_ed25519" \
+          ./ "$user@$host:/tmp/jamulus-build/"
+        echo "    building natively on $host (takes a few minutes) ..."
+        # Generate and pipe a build script; Python handles escaping cleanly.
+        python3 - "$gcc13" "$swapon" "$jobs" "$qmake" "$HEX_REV" <<'PYEOF' | ssh -i ~/.ssh/id_ed25519 "$user@$host" bash
 import sys
 gcc13, swapon, jobs, qmake, hex_rev = sys.argv[1:]
 lines = ['set -euo pipefail', 'cd /tmp/jamulus-build']
@@ -148,6 +157,12 @@ lines.append('make -j1' if jobs == '1' else 'make -j$(nproc)')
 lines += ['sudo mv Jamulus /usr/bin/jamulus-jamfan', 'sudo chmod +x /usr/bin/jamulus-jamfan']
 print('\n'.join(lines))
 PYEOF
+        if [[ "$gcc13" == "1" ]]; then
+          echo "    caching ubuntu24/aarch64 binary for cross-deploy ..."
+          scp -i ~/.ssh/id_ed25519 "$user@$host:/usr/bin/jamulus-jamfan" /tmp/jamfan-arm64-u24
+          ARM64_U24_BINARY="/tmp/jamfan-arm64-u24"
+        fi
+      fi
     fi
     ssh -i ~/.ssh/id_ed25519 "$user@$host" "sudo systemctl restart $service"
     echo "    done."
