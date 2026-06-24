@@ -313,7 +313,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
     m_centralDefense = new CentralDefense(QUrl("https://jamulus.live/ip-allowed"), this);
     m_centralDefense->loadAllowlist(QStringLiteral("/etc/jamulus/ip-allowlist.txt"));
 
-    connect(m_centralDefense, &CentralDefense::updated, this, [](int a, int b){
+    connect(m_centralDefense, &CentralDefense::updated, this, [](int, int){
     //    qInfo() << "Central Defense updated. ASNs:" << a << "CIDRs:" << b;
     });
 

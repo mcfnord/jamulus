@@ -6,7 +6,6 @@
 #include <QLoggingCategory>
 #include <QFile>
 #include <QTextStream>
-#include <QEventLoop>
 
 Q_LOGGING_CATEGORY(lcCentralDefense, "jamulus.centraldefense")
 
@@ -255,41 +254,10 @@ bool CentralDefense::shouldAllow(const QHostAddress& addr)
         }
     }
 
-    QUrl url = m_lookupUrl;
-    QString path = url.path();
-    if (!path.endsWith('/')) path += '/';
-    path += ipStr;
-    url.setPath(path);
-
-    qCInfo(lcCentralDefense) << "precheck: lookup" << ipStr;
-    QNetworkRequest req(url);
-    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Jamulus-CentralDefense/1.0"));
-
-    QNetworkReply* reply = m_nam->get(req);
-    QEventLoop loop;
-    QTimer timer;
-    timer.setSingleShot(true);
-    connect(&timer, &QTimer::timeout, reply, &QNetworkReply::abort);
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    timer.start(m_lookupTimeoutSeconds * 1000);
-    loop.exec();
-
-    bool allowed = true;
-    if (reply->error() != QNetworkReply::NoError) {
-        qCWarning(lcCentralDefense) << "precheck: error (fail-open)" << ipStr << reply->errorString();
-        QMutexLocker l(&m_blockedCacheMutex);
-        m_allowedCache.insert(ipStr, QDateTime::currentDateTimeUtc());
-    } else {
-        QString body = QString::fromUtf8(reply->readAll()).trimmed();
-        bool blocked = (body == QStringLiteral("false"));
-        allowed = !blocked;
-        qCInfo(lcCentralDefense) << "precheck: finish" << ipStr << "blocked=" << blocked;
-        QMutexLocker l(&m_blockedCacheMutex);
-        if (blocked)
-            m_blockedCache.insert(ipStr, QDateTime::currentDateTimeUtc());
-        else
-            m_allowedCache.insert(ipStr, QDateTime::currentDateTimeUtc());
-    }
-    reply->deleteLater();
-    return allowed;
+    // Cache miss: fail-open and queue an async lookup so the audio thread is never blocked.
+    // The addressBlocked signal will disconnect the client if the lookup returns blocked.
+    qCInfo(lcCentralDefense) << "precheck: cache-miss, fail-open, queuing async" << ipStr;
+    QMetaObject::invokeMethod(this, "checkAndLookup", Qt::QueuedConnection,
+        Q_ARG(QHostAddress, addr));
+    return true;
 }
