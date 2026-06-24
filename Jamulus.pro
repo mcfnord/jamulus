@@ -1,4 +1,5 @@
-VERSION = 3.12.1-JAMFAN
+isEmpty(JAMFAN_REV): JAMFAN_REV = 00
+VERSION = 3.12.1-JAMFAN-$$JAMFAN_REV
 
 # Using lrelease and embed_translations only works for Qt 5.12 or later.
 # See https://github.com/jamulussoftware/jamulus/pull/3288 for these changes.

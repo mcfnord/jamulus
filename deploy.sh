@@ -29,7 +29,7 @@ REV_FILE="jamfan-rev"
 REV=$(( $(cat "$REV_FILE" 2>/dev/null || echo "0") + 1 ))
 printf '%d\n' "$REV" > "$REV_FILE"
 HEX_REV=$(printf '%02x' "$(( REV % 256 ))")
-JAMFAN_VERSION="JAMFAN-${HEX_REV}"
+JAMFAN_VERSION="3.12.1-JAMFAN-${HEX_REV}"
 
 # Output tab-separated: host user service arch gcc13_fix swapon make_jobs qmake_cmd name
 # name is last so spaces in server names are handled correctly by bash read.
@@ -66,7 +66,8 @@ print('1' if any(s.get('arch', 'x86_64') == 'x86_64' for s in servers) else '0')
 
 if [[ "$HAS_X86" == "1" ]]; then
     echo "==> Building x86-64 (${JAMFAN_VERSION})"
-    qmake "CONFIG+=headless" "VERSION=${JAMFAN_VERSION}" Jamulus.pro > /dev/null
+    qmake "CONFIG+=headless" "JAMFAN_REV=${HEX_REV}" Jamulus.pro > /dev/null
+    make clean > /dev/null 2>&1 || true
     make -j$(nproc)
     echo "    x86-64 build done."
 fi
@@ -125,13 +126,13 @@ PYCHECK
         ./ "$user@$host:/tmp/jamulus-build/"
       echo "    building natively on $host (takes a few minutes) ..."
       # Generate and pipe a build script; Python handles escaping cleanly.
-      python3 - "$gcc13" "$swapon" "$jobs" "$qmake" "$JAMFAN_VERSION" <<'PYEOF' | ssh -i ~/.ssh/id_ed25519 "$user@$host" bash
+      python3 - "$gcc13" "$swapon" "$jobs" "$qmake" "$HEX_REV" <<'PYEOF' | ssh -i ~/.ssh/id_ed25519 "$user@$host" bash
 import sys
-gcc13, swapon, jobs, qmake, jamfan_version = sys.argv[1:]
+gcc13, swapon, jobs, qmake, hex_rev = sys.argv[1:]
 lines = ['set -euo pipefail', 'cd /tmp/jamulus-build']
 if swapon != '-':
     lines.append(f'sudo swapon {swapon} 2>/dev/null || true')
-lines.append(f'{qmake} "CONFIG+=headless" "VERSION={jamfan_version}" Jamulus.pro')
+lines.append(f'{qmake} "CONFIG+=headless" "JAMFAN_REV={hex_rev}" Jamulus.pro')
 if gcc13 == '1':
     # GCC 13 / Qt5 moc can't parse _GLIBCXX_VISIBILITY; strip it from moc_predefs.h.
     lines += [
