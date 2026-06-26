@@ -435,29 +435,12 @@ void CServer::OnNewConnection ( int iChID, int iTotChans, CHostAddress RecHostAd
 {
     QMutexLocker locker ( &Mutex );
 
-    // --- Central Defense: Trap the Bouncer's Whistle (FORCE SYNC) ---
+    // Dispatch the block-check to the main thread so the socket thread is never stalled.
+    // addressBlocked signal will disconnect the client if it comes back blocked.
     if ( m_centralDefense )
     {
-        bool bIsBlocked = false;
-
-        // FIX: Added 'this' as the 3rd argument and moved Qt::DirectConnection to the 5th.
-        // This satisfies the specific Qt 5 overload for lambdas with connection types.
-        QMetaObject::Connection conn = connect( m_centralDefense, &CentralDefense::addressBlocked, this,
-            [&bIsBlocked]( const QHostAddress&, const QString& ) {
-                bIsBlocked = true;
-            }, Qt::DirectConnection );
-
-        // Run the check
-        m_centralDefense->checkAndLookup( RecHostAddr.InetAddr );
-
-        disconnect( conn );
-
-        if ( bIsBlocked )
-        {
-            // Abort immediately. We haven't sent the "Welcome" message yet,
-            // so the client will just time out.
-            return;
-        }
+        QMetaObject::invokeMethod ( m_centralDefense, "checkAndLookup", Qt::QueuedConnection,
+            Q_ARG ( QHostAddress, RecHostAddr.InetAddr ) );
     }
 
     m_vecChanInfoReported[iChID] = false;

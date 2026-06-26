@@ -24,7 +24,7 @@ public:
 
     void start();
     void stop();
-    void checkAndLookup(const QHostAddress& addr);
+    Q_INVOKABLE void checkAndLookup(const QHostAddress& addr);
     void loadAllowlist(const QString& path);
     bool shouldAllow(const QHostAddress& addr);
 
