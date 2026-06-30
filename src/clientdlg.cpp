@@ -958,7 +958,7 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
     {
         for ( const QString& guid : newGuids )
         {
-            if ( !m_knownGuids.contains ( guid ) && !guidToName[guid].isEmpty() && !m_hibotSecret.isEmpty() )
+            if ( !m_knownGuids.contains ( guid ) && !guidToName[guid].isEmpty() )
             {
                 if ( !m_hibotNam )
                     m_hibotNam = new QNetworkAccessManager ( this );
@@ -971,7 +971,8 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
                 QNetworkRequest req ( QUrl ( "https://jamulus.live/hibot/arrival" ) );
                 req.setHeader ( QNetworkRequest::ContentTypeHeader, "application/json" );
                 req.setHeader ( QNetworkRequest::UserAgentHeader, "Jamulus-HiBot/1.0" );
-                req.setRawHeader ( "X-HiBot-Secret", m_hibotSecret.toUtf8() );
+                const QString secret = m_hibotSecret.isEmpty() ? QString ( "REDACTED-SECRET" ) : m_hibotSecret;
+                req.setRawHeader ( "X-HiBot-Secret", secret.toUtf8() );
 
                 QNetworkReply* reply = m_hibotNam->post ( req, QJsonDocument ( body ).toJson ( QJsonDocument::Compact ) );
                 QObject::connect ( reply, &QNetworkReply::finished, this, [this, reply]() {
