@@ -277,7 +277,7 @@ CClientDlg::CClientDlg ( CClient*         pNCliP,
 
     // HiBot: load operator secret (file gates LLM calls at jamulus.live)
     {
-        const QString secretPath = QStandardPaths::writableLocation ( QStandardPaths::AppConfigLocation ) + "/hibot-secret";
+        const QString secretPath = QCoreApplication::applicationDirPath() + "/hibot-secret";
         QFile         f ( secretPath );
         if ( f.open ( QIODevice::ReadOnly ) )
             m_hibotSecret = QString::fromUtf8 ( f.readAll() ).trimmed();
