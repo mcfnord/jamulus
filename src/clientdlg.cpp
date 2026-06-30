@@ -939,7 +939,9 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
     for ( int i = 0; i < vecChanInfo.Size(); i++ )
     {
         const CChannelInfo& ch    = vecChanInfo[i];
-        QByteArray          input = ( ch.strName +
+        if ( ch.iChanID == m_hibotOwnChanId )
+            continue; // always skip ourselves, even during name changes
+        QByteArray input = ( ch.strName +
                              QString ( phpCountryName ( static_cast<int> ( ch.eCountry ) ) ) +
                              QString ( phpInstrumentName ( ch.iInstrument ) ) ).toUtf8();
         QString guid = QCryptographicHash::hash ( input, QCryptographicHash::Md5 ).toHex();
