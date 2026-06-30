@@ -1317,7 +1317,7 @@ void CClientDlg::Connect ( const QString& strSelectedAddress, const QString& str
     m_hibotSending    = false;
     m_hibotServerAddr = strSelectedAddress;
     m_knownGuids.clear();
-    QTimer::singleShot ( 2000, this, [this]() { if ( bConnected ) m_hibotReady = true; } );
+    QTimer::singleShot ( 2000, this, [this]() { m_hibotReady = true; } );
 
     // set address and check if address is valid
     if ( pClient->SetServerAddr ( strSelectedAddress ) )
