@@ -67,6 +67,7 @@
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <QFile>
+#include <QRegularExpression>
 #if defined( Q_OS_MACOS )
 #    include "mac/badgelabel.h"
 #endif
@@ -118,10 +119,11 @@ protected:
 
     int                    iClients;
     QSet<QString>          m_knownGuids;
-    bool                   m_hibotReady  = false;
+    bool                   m_hibotReady   = false;
+    bool                   m_hibotSending = false;
     QString                m_hibotServerAddr;
     QString                m_hibotSecret;
-    QNetworkAccessManager* m_hibotNam    = nullptr;
+    QNetworkAccessManager* m_hibotNam     = nullptr;
     bool                   bConnected;
     bool           bConnectDlgWasShown;
     bool           bDetectFeedback;

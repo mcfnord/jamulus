@@ -949,12 +949,7 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
             countryVotes.append ( static_cast<int> ( ch.eCountry ) );
     }
 
-    if ( !m_hibotReady )
-    {
-        // first update after connecting: snapshot existing players, no greetings
-        m_hibotReady = true;
-    }
-    else if ( !chbLocalMute->isChecked() )
+    if ( m_hibotReady && !chbLocalMute->isChecked() && !m_hibotSending )
     {
         for ( const QString& guid : newGuids )
         {
@@ -976,15 +971,19 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
 
                 QNetworkReply* reply = m_hibotNam->post ( req, QJsonDocument ( body ).toJson ( QJsonDocument::Compact ) );
                 QObject::connect ( reply, &QNetworkReply::finished, this, [this, reply]() {
-                    const QString msg = QString::fromUtf8 ( reply->readAll() ).trimmed();
+                    QString msg = QString::fromUtf8 ( reply->readAll() ).trimmed();
+                    msg.remove ( QRegularExpression ( "<[^>]*>" ) );
+                    msg = msg.trimmed();
                     if ( !msg.isEmpty() )
                     {
+                        m_hibotSending = true;
                         const QString savedName = pClient->ChannelInfo.strName;
                         pClient->ChannelInfo.strName = "HiBot";
                         pClient->SetRemoteInfo();
                         pClient->CreateChatTextMes ( msg );
                         pClient->ChannelInfo.strName = savedName;
                         pClient->SetRemoteInfo();
+                        QTimer::singleShot ( 1000, this, [this]() { m_hibotSending = false; } );
                     }
                     reply->deleteLater();
                 } );
@@ -1315,7 +1314,10 @@ void CClientDlg::OnCLPingTimeWithNumClientsReceived ( CHostAddress InetAddr, int
 void CClientDlg::Connect ( const QString& strSelectedAddress, const QString& strMixerBoardLabel )
 {
     m_hibotReady      = false;
+    m_hibotSending    = false;
     m_hibotServerAddr = strSelectedAddress;
+    m_knownGuids.clear();
+    QTimer::singleShot ( 2000, this, [this]() { if ( bConnected ) m_hibotReady = true; } );
 
     // set address and check if address is valid
     if ( pClient->SetServerAddr ( strSelectedAddress ) )
@@ -1365,7 +1367,8 @@ void CClientDlg::Connect ( const QString& strSelectedAddress, const QString& str
 
 void CClientDlg::Disconnect()
 {
-    m_hibotReady = false;
+    m_hibotReady   = false;
+    m_hibotSending = false;
     m_knownGuids.clear();
 
     // only stop client if currently running, in case we received
