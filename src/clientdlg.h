@@ -121,6 +121,7 @@ protected:
     QSet<QString>          m_knownGuids;
     bool                   m_hibotReady   = false;
     bool                   m_hibotSending = false;
+    bool                   m_hibotSnapped = false;
     int                    m_hibotOwnChanId = -1;
     QString                m_hibotServerAddr;
     QString                m_hibotSecret;

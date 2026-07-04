@@ -951,7 +951,14 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
             countryVotes.append ( static_cast<int> ( ch.eCountry ) );
     }
 
-    if ( m_hibotReady && !chbLocalMute->isChecked() && !m_hibotSending )
+    if ( !m_hibotSnapped )
+    {
+        // First CLM after connect carries the full current roster — snapshot it,
+        // then enable greetings after a short settling delay.
+        m_hibotSnapped = true;
+        QTimer::singleShot ( 1000, this, [this]() { m_hibotReady = true; } );
+    }
+    else if ( m_hibotReady && !chbLocalMute->isChecked() && !m_hibotSending )
     {
         for ( const QString& guid : newGuids )
         {
@@ -1317,9 +1324,9 @@ void CClientDlg::Connect ( const QString& strSelectedAddress, const QString& str
 {
     m_hibotReady      = false;
     m_hibotSending    = false;
+    m_hibotSnapped    = false;
     m_hibotServerAddr = strSelectedAddress;
     m_knownGuids.clear();
-    QTimer::singleShot ( 2000, this, [this]() { m_hibotReady = true; } );
 
     // set address and check if address is valid
     if ( pClient->SetServerAddr ( strSelectedAddress ) )
@@ -1371,6 +1378,7 @@ void CClientDlg::Disconnect()
 {
     m_hibotReady   = false;
     m_hibotSending = false;
+    m_hibotSnapped = false;
     m_knownGuids.clear();
 
     // only stop client if currently running, in case we received
