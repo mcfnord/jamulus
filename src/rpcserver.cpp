@@ -255,6 +255,31 @@ void CRpcServer::ProcessMessage ( QTcpSocket* pSocket, QJsonObject message, QJso
     Q_UNUSED ( pSocket );
 }
 
+QString CRpcServer::DispatchTrusted ( const QJsonObject& message )
+{
+    QJsonObject response;
+    response["jsonrpc"] = QJsonValue ( "2.0" );
+    response["id"]      = message["id"];
+
+    auto method = message["method"].toString();
+    if ( method.isEmpty() )
+    {
+        response["error"] = CreateJsonRpcError ( iErrInvalidRequest, "Invalid request: method missing or not a string" );
+        return QJsonDocument ( response ).toJson ( QJsonDocument::Compact );
+    }
+
+    auto it = mapMethodHandlers.find ( method );
+    if ( it == mapMethodHandlers.end() )
+    {
+        response["error"] = CreateJsonRpcError ( iErrMethodNotFound, "Method not found" );
+        return QJsonDocument ( response ).toJson ( QJsonDocument::Compact );
+    }
+
+    auto params = message["params"].toObject();
+    it.value() ( params, response );
+    return QJsonDocument ( response ).toJson ( QJsonDocument::Compact );
+}
+
 void CRpcServer::BroadcastNotification ( const QString& strMethod, const QJsonObject& aParams )
 {
     for ( auto socket : vecClients )

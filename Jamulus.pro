@@ -35,7 +35,8 @@ CONFIG += qt \
 
 QT += network \
     xml \
-    concurrent
+    concurrent \
+    websockets
 
 contains(CONFIG, "nosound") {
     CONFIG -= "nosound"

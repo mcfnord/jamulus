@@ -60,5 +60,6 @@ private:
     QHash<QString, QDateTime> m_allowedCache;
     QMutex m_blockedCacheMutex;
     int m_blockedCacheTtlSeconds = 300;
-    int m_allowedCacheTtlSeconds = 20;
+    int m_allowedCacheTtlSeconds = 600;
+    int m_allowedCacheTtlJitterSeconds = 30;
 };

@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QLoggingCategory>
 #include <QFile>
+#include <QRandomGenerator>
 #include <QTextStream>
 
 Q_LOGGING_CATEGORY(lcCentralDefense, "jamulus.centraldefense")
@@ -87,7 +88,7 @@ void CentralDefense::checkAndLookup(const QHostAddress& addr)
     }
 
     if (isAllowlisted(addr)) {
-        qCInfo(lcCentralDefense) << "lookup: local-allowlist" << addr.toString();
+        qCDebug(lcCentralDefense) << "lookup: local-allowlist" << addr.toString();
         emit addressChecked(addr, false, QStringLiteral("local-allowlist"));
         return;
     }
@@ -99,7 +100,7 @@ void CentralDefense::checkAndLookup(const QHostAddress& addr)
         auto it = m_blockedCache.find(ipStr);
         if (it != m_blockedCache.end()) {
             if (it.value().secsTo(QDateTime::currentDateTimeUtc()) < m_blockedCacheTtlSeconds) {
-                qCInfo(lcCentralDefense) << "lookup: cached-block" << ipStr;
+                qCDebug(lcCentralDefense) << "lookup: cached-block" << ipStr;
                 emit addressBlocked(addr, QStringLiteral("ip-lookup-cached"));
                 emit addressChecked(addr, true, QStringLiteral("ip-lookup-cached"));
                 return;
@@ -109,7 +110,7 @@ void CentralDefense::checkAndLookup(const QHostAddress& addr)
         auto ait = m_allowedCache.find(ipStr);
         if (ait != m_allowedCache.end()) {
             if (ait.value().secsTo(QDateTime::currentDateTimeUtc()) < m_allowedCacheTtlSeconds) {
-                qCInfo(lcCentralDefense) << "lookup: cached-allow" << ipStr;
+                qCDebug(lcCentralDefense) << "lookup: cached-allow" << ipStr;
                 emit addressChecked(addr, false, QStringLiteral("ip-lookup-cached-ok"));
                 return;
             }
@@ -121,11 +122,11 @@ void CentralDefense::checkAndLookup(const QHostAddress& addr)
         QMutexLocker l(&m_pendingMutex);
 
         if (m_inflightIp == ipStr) {
-            qCInfo(lcCentralDefense) << "lookup: coalesced (inflight)" << ipStr;
+            qCDebug(lcCentralDefense) << "lookup: coalesced (inflight)" << ipStr;
             return;
         }
         if (m_pendingSet.contains(ipStr)) {
-            qCInfo(lcCentralDefense) << "lookup: coalesced (queued)" << ipStr;
+            qCDebug(lcCentralDefense) << "lookup: coalesced (queued)" << ipStr;
             return;
         }
 
@@ -223,7 +224,9 @@ void CentralDefense::onLookupFinished()
     } else {
         {
             QMutexLocker l(&m_blockedCacheMutex);
-            m_allowedCache.insert(ip, QDateTime::currentDateTimeUtc());
+            // Jitter the expiry so concurrent sessions don't all expire simultaneously.
+            int jitter = (int)QRandomGenerator::global()->bounded((uint)(2 * m_allowedCacheTtlJitterSeconds + 1)) - m_allowedCacheTtlJitterSeconds;
+            m_allowedCache.insert(ip, QDateTime::currentDateTimeUtc().addSecs(jitter));
         }
         emit addressChecked(addr, false, QStringLiteral("ip-lookup-ok"));
     }
@@ -256,7 +259,7 @@ bool CentralDefense::shouldAllow(const QHostAddress& addr)
 
     // Cache miss: fail-open and queue an async lookup so the audio thread is never blocked.
     // The addressBlocked signal will disconnect the client if the lookup returns blocked.
-    qCInfo(lcCentralDefense) << "precheck: cache-miss, fail-open, queuing async" << ipStr;
+    qCDebug(lcCentralDefense) << "precheck: cache-miss, fail-open, queuing async" << ipStr;
     QMetaObject::invokeMethod(this, "checkAndLookup", Qt::QueuedConnection,
         Q_ARG(QHostAddress, addr));
     return true;

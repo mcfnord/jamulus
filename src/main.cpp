@@ -893,6 +893,7 @@ int main ( int argc, char** argv )
     }
 #else
     CRpcServer*   pRpcServer = nullptr;
+    QString       strJsonRpcSecret;
 
     if ( iJsonRpcPortNumber != INVALID_PORT )
     {
@@ -909,7 +910,7 @@ int main ( int argc, char** argv )
             exit ( 1 );
         }
         QTextStream qtsJsonRpcSecretStream ( &qfJsonRpcSecretFile );
-        QString     strJsonRpcSecret = qtsJsonRpcSecretStream.readLine();
+        strJsonRpcSecret = qtsJsonRpcSecretStream.readLine();
         if ( strJsonRpcSecret.length() < JSON_RPC_MINIMUM_SECRET_LENGTH )
         {
             qCritical() << qUtf8Printable ( QString ( "JSON-RPC: Refusing to run with secret of length %1 (required: %2). Exiting." )
@@ -1014,7 +1015,12 @@ int main ( int argc, char** argv )
             if ( pRpcServer )
             {
                 new CServerRpc ( &Server, pRpcServer, pRpcServer );
-                Server.SetChatReporterRpcPort ( static_cast<quint16> ( iJsonRpcPortNumber ) );
+                Server.SetChatReporterWelcomeCallback ( [&Server] ( int ch, const QString& msg ) {
+                    Server.SendChatToChannel ( ch, msg );
+                } );
+                Server.SetChatReporterRpcDispatch ( [pRpcServer] ( const QJsonObject& msg ) -> QString {
+                    return pRpcServer->DispatchTrusted ( msg );
+                } );
             }
 
 #endif

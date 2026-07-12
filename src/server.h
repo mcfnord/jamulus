@@ -27,8 +27,11 @@
 #include <QObject>
 #include <QDateTime>
 #include <QHostAddress>
+#include <QJsonObject>
 #include <QFileInfo>
+#include <QTimer>
 #include <algorithm>
+#include <functional>
 #ifdef USE_OPUS_SHARED_LIB
 #    include "opus/opus_custom.h"
 #else
@@ -184,7 +187,8 @@ public:
 
     void SendChatToChannel ( const int iChanNum, const QString& strMsg );
     void BroadcastChatMessage ( const QString& strMsg );
-    void SetChatReporterRpcPort ( quint16 port );
+    void SetChatReporterWelcomeCallback ( std::function<void(int, const QString&)> cb );
+    void SetChatReporterRpcDispatch ( std::function<QString(const QJsonObject&)> cb );
 
 protected:
     // access functions for actual channels
@@ -304,6 +308,7 @@ protected:
     QString strServerHTMLFileListName;
 
     CHighPrecisionTimer HighPrecisionTimer;
+    QTimer              TimerCapacityLog;
 
     // server list
     CServerListManager ServerListManager;
@@ -357,6 +362,7 @@ signals:
 
 public slots:
     void OnTimer();
+    void OnTimerCapacityLog();
 
     void OnNewConnection ( int iChID, int iTotChans, CHostAddress RecHostAddr );
 

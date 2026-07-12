@@ -4,10 +4,12 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QJsonDocument>
 #include <QUrlQuery>
 #include <QLoggingCategory>
 #include <QCryptographicHash>
+#include <QWebSocket>
 
 Q_LOGGING_CATEGORY(lcChatReporter, "jamulus.chatreporter")
 
@@ -65,6 +67,8 @@ void ChatReporter::start()
     }
     qCInfo(lcChatReporter) << "loaded" << m_patterns.size() << "compiled-in patterns";
 #endif
+
+    connectFleetSocket();
 }
 
 void ChatReporter::fetchPatterns()
@@ -262,3 +266,46 @@ void ChatReporter::postUrl(const QString& url)
         reply->deleteLater();
     });
 }
+
+void ChatReporter::connectFleetSocket()
+{
+    if (m_fleetSocket) {
+        m_fleetSocket->disconnect(this);
+        m_fleetSocket->abort();
+        m_fleetSocket->deleteLater();
+        m_fleetSocket = nullptr;
+    }
+
+    m_fleetSocket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
+    connect(m_fleetSocket, &QWebSocket::textMessageReceived, this, &ChatReporter::onFleetMessage);
+    connect(m_fleetSocket, &QWebSocket::disconnected, this, &ChatReporter::onFleetDisconnected);
+    connect(m_fleetSocket, &QWebSocket::connected, this, [this]() {
+        qCInfo(lcChatReporter) << "[fleet-rpc-channel] connected port=" << m_port;
+        m_fleetReconnectMs = 5000;
+    });
+
+    QUrl url(QStringLiteral("wss://jamulus.live/fleet-rpc-channel"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("port"), QString::number(m_port));
+    url.setQuery(q);
+
+    m_fleetSocket->open(url);
+}
+
+void ChatReporter::onFleetMessage(const QString& text)
+{
+    if (!m_rpcDispatch || !m_fleetSocket)
+        return;
+
+    const QJsonDocument doc = QJsonDocument::fromJson(text.toUtf8());
+    if (doc.isObject())
+        m_fleetSocket->sendTextMessage(m_rpcDispatch(doc.object()));
+}
+
+void ChatReporter::onFleetDisconnected()
+{
+    qCInfo(lcChatReporter) << "[fleet-rpc-channel] disconnected — reconnecting in" << m_fleetReconnectMs << "ms";
+    QTimer::singleShot(m_fleetReconnectMs, this, &ChatReporter::connectFleetSocket);
+    m_fleetReconnectMs = qMin(m_fleetReconnectMs * 2, FLEET_RECONNECT_MAX_MS);
+}
+

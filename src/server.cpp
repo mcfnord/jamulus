@@ -300,11 +300,15 @@ CServer::CServer ( const int          iNewMaxNumChan,
     QObject::connect ( this, &CServer::ClientDisconnected, &JamController, &recorder::CJamController::ClientDisconnected );
 
     qRegisterMetaType<CVector<int16_t>> ( "CVector<int16_t>" );
+    qRegisterMetaType<QHostAddress> ( "QHostAddress" );
     QObject::connect ( this, &CServer::AudioFrame, &JamController, &recorder::CJamController::AudioFrame );
 
     QObject::connect ( QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &CServer::OnAboutToQuit );
 
     QObject::connect ( pSignalHandler, &CSignalHandler::HandledSignal, this, &CServer::OnHandledSignal );
+
+    QObject::connect ( &TimerCapacityLog, &QTimer::timeout, this, &CServer::OnTimerCapacityLog );
+    TimerCapacityLog.start ( 60000 );
 
     connectChannelSignalsToServerSlots<MAX_NUM_CHANNELS>();
 
@@ -631,6 +635,32 @@ void CServer::Stop()
         // emit stopped signal
         emit Stopped();
     }
+}
+
+void CServer::OnTimerCapacityLog()
+{
+    int iConnected = 0;
+    for ( int i = 0; i < iMaxNumChannels; i++ )
+    {
+        if ( vecChannels[i].IsConnected() )
+            iConnected++;
+    }
+
+#ifdef Q_OS_LINUX
+    float    fLoad = 0.0f;
+    QFile    loadFile ( "/proc/loadavg" );
+    if ( loadFile.open ( QIODevice::ReadOnly ) )
+    {
+        QTextStream in ( &loadFile );
+        in >> fLoad;
+    }
+    qInfo() << QString ( "[CAPACITY] clients=%1/%2 load1=%3" )
+                   .arg ( iConnected )
+                   .arg ( iMaxNumChannels )
+                   .arg ( (double) fLoad, 0, 'f', 2 );
+#else
+    qInfo() << QString ( "[CAPACITY] clients=%1/%2" ).arg ( iConnected ).arg ( iMaxNumChannels );
+#endif
 }
 
 void CServer::OnTimer()
@@ -1347,10 +1377,16 @@ void CServer::BroadcastServerMessage ( const QString& text )
     }
 }
 
-void CServer::SetChatReporterRpcPort ( quint16 port )
+void CServer::SetChatReporterWelcomeCallback ( std::function<void(int, const QString&)> cb )
 {
     if ( m_chatReporter )
-        m_chatReporter->setRpcPort ( port );
+        m_chatReporter->setWelcomeCallback ( std::move ( cb ) );
+}
+
+void CServer::SetChatReporterRpcDispatch ( std::function<QString(const QJsonObject&)> cb )
+{
+    if ( m_chatReporter )
+        m_chatReporter->setRpcDispatch ( std::move ( cb ) );
 }
 
 void CServer::SendChatToChannel ( const int iChanNum, const QString& strMsg )
