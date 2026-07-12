@@ -23,6 +23,16 @@ for s in json.load(open('$FLEET')):
 fi
 
 TARGET="$1"
+FORCE=0
+for arg in "$@"; do [[ "$arg" == "--force" ]] && FORCE=1; done
+
+# Rsyslog filter to suppress CentralDefense threading spam (fills disk on idle servers)
+RSYSLOG_B64=$(printf ':msg, contains, "QObject: Cannot create children for a parent that is in a different thread" stop\n' | base64 -w0)
+APPLY_RSYSLOG="echo ${RSYSLOG_B64} | base64 -d | sudo tee /etc/rsyslog.d/90-suppress-jamulus.conf > /dev/null && sudo systemctl reload rsyslog 2>/dev/null || true"
+
+# Fetch current IPs for dormant instances (instance_id → ip) from jamulus.live.
+# Falls back to fleet.json host field if cache is unavailable.
+DORMANT_IPS=$(ssh -i ~/.ssh/id_ed25519 root@jamulus.live 'cat /root/dormant-ip-cache.json 2>/dev/null || echo "{}"' 2>/dev/null || echo '{}')
 
 # Increment build rev and format as two hex digits (wraps at 256)
 REV_FILE="jamfan-rev"
@@ -33,9 +43,10 @@ JAMFAN_VERSION="3.12.1-JAMFAN-${HEX_REV}"
 
 # Output tab-separated: host user service arch gcc13_fix swapon make_jobs qmake_cmd name
 # name is last so spaces in server names are handled correctly by bash read.
-readarray -t PAIRS < <(python3 -c "
-import json, sys
+readarray -t PAIRS < <(DORMANT_IPS="$DORMANT_IPS" python3 -c "
+import json, sys, os
 fleet = json.load(open('$FLEET'))
+dormant_ips = json.loads(os.environ.get('DORMANT_IPS', '{}'))
 target = sys.argv[1]
 servers = fleet if target == 'all' else [
     s for s in fleet if s['name'].lower() == target.lower() or s['host'] == target
@@ -49,8 +60,17 @@ for s in servers:
     gcc13    = '1' if s.get('gcc13_fix', False) else '0'
     swapon   = s.get('swapon', '-')
     jobs     = str(s.get('make_jobs', 0))   # 0 = use nproc on remote
-    qmake    = s.get('qmake_cmd', 'qmake')
-    print('\t'.join([s['host'], s['user'], service, arch, gcc13, swapon, jobs, qmake, s['name']]))
+    qmake       = s.get('qmake_cmd', 'qmake')
+    rpcport     = str(s.get('rpcport', 9999))
+    secret_file = s.get('secret_file', '/secret.txt')
+    skip_nb     = '1' if s.get('skip_native_build', False) else '0'
+    iid  = s.get('instance_id', '')
+    if s.get('dormant') and iid and iid not in dormant_ips:
+        import sys as _sys
+        print(f'SKIP_DORMANT\t{s[\"name\"]}', file=_sys.stderr)
+        continue
+    host = dormant_ips.get(iid, s['host']) if iid else s['host']
+    print('\t'.join([host, s['user'], service, arch, gcc13, swapon, jobs, qmake, rpcport, secret_file, skip_nb, s['name']]))
 " "$TARGET")
 
 echo "==> Build rev: $JAMFAN_VERSION"
@@ -65,35 +85,126 @@ print('1' if any(s.get('arch', 'x86_64') == 'x86_64' for s in servers) else '0')
 " "$TARGET")
 
 if [[ "$HAS_X86" == "1" ]]; then
-    echo "==> Building x86-64 (${JAMFAN_VERSION})"
-    qmake "CONFIG+=headless" "JAMFAN_REV=${HEX_REV}" Jamulus.pro > /dev/null
-    current_ver=$(strings ./Jamulus 2>/dev/null | grep -o 'JAMFAN-[0-9a-f][0-9a-f]' | head -1 || echo "")
-    if [[ "$current_ver" != "JAMFAN-${HEX_REV}" ]]; then
-        echo "    version changed (${current_ver} → JAMFAN-${HEX_REV}), clean rebuild"
+    existing_ver=$(strings "$BINARY" 2>/dev/null | grep -o 'JAMFAN-[0-9a-f][0-9a-f]' | head -1 || echo "")
+    if [[ "$existing_ver" == "JAMFAN-${HEX_REV}" ]]; then
+        echo "==> Using existing x86-64 binary ($existing_ver)"
+    else
+        echo "==> Building x86-64 (${JAMFAN_VERSION}) — was: ${existing_ver:-missing}"
+        qmake "CONFIG+=headless" "JAMFAN_REV=${HEX_REV}" Jamulus.pro > /dev/null
         make clean > /dev/null 2>&1 || true
+        make -j$(nproc)
+        echo "    x86-64 build done."
     fi
-    make -j$(nproc)
-    echo "    x86-64 build done."
 fi
 
 declare -A BUILT_HOSTS
 ARM64_U24_BINARY=""   # path to cached ubuntu24/aarch64 binary for cross-deploy
+if [[ -f /tmp/jamfan-arm64-u24 ]]; then
+    CACHED_VER=$(strings /tmp/jamfan-arm64-u24 2>/dev/null | grep -o 'JAMFAN-[0-9a-f][0-9a-f]' | head -1 || echo "?")
+    if [[ "$CACHED_VER" == "JAMFAN-${HEX_REV}" ]]; then
+        ARM64_U24_BINARY="/tmp/jamfan-arm64-u24"
+        echo "==> Using cached aarch64 binary (${CACHED_VER}) — delete /tmp/jamfan-arm64-u24 to force rebuild"
+    else
+        echo "==> Cached aarch64 binary is ${CACHED_VER}, current rev is JAMFAN-${HEX_REV} — forcing native rebuild"
+    fi
+fi
 
 for pair in "${PAIRS[@]}"; do
-  IFS=$'\t' read -r host user service arch gcc13 swapon jobs qmake name <<< "$pair"
+  IFS=$'\t' read -r host user service arch gcc13 swapon jobs qmake rpcport secret_file skip_nb name <<< "$pair"
   echo "==> $name ($user@$host) [$service]"
+
+  skip=$(python3 -c "import json; fleet=json.load(open('$FLEET')); s=next((x for x in fleet if x['name']==\"$name\"),{}); print('1' if s.get('skip') else '0')")
+  if [[ "$skip" == "1" ]]; then
+    echo "    SKIPPED (skip=true in fleet.json)"
+    continue
+  fi
+
   ssh-keyscan -H "$host" >> ~/.ssh/known_hosts 2>/dev/null
+
+  # For dormant instances, verify SSH is reachable before attempting deploy.
+  # Stale cache entries (instance stopped after cache was read) should skip, not abort.
+  is_dormant=$(python3 -c "import json; fleet=json.load(open('$FLEET')); s=next((x for x in fleet if x['name']==\"$name\"),{}); print('1' if s.get('dormant') else '0')")
+  if [[ "$is_dormant" == "1" ]]; then
+    if ! ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=8 -o BatchMode=yes "$user@$host" 'echo ok' &>/dev/null; then
+      echo "    SKIP_DORMANT $name — SSH unreachable at $host (stale cache entry)"
+      continue
+    fi
+  fi
+
+  # For Rock servers: generate and push the service file, set up iptables for the RPC port
+  if [[ "$service" == "jamulus-rock" ]]; then
+    svc_tmp=$(mktemp /tmp/jfan-rock.XXXXXX)
+    python3 -c "
+import sys, json
+name, fleet_path = sys.argv[1], sys.argv[2]
+fleet = json.load(open(fleet_path))
+s = next((x for x in fleet if x.get('name') == name), {})
+port      = s.get('port', 22225)
+rpcport   = s.get('rpcport', 9998)
+cc        = s.get('cc', 'US')
+maxcli    = s.get('maxclients', 8)
+group     = 'nobody' if s.get('os') == 'oracle-linux-9' else 'nogroup'
+print(f'''[Unit]
+Description=Jamulus Rock server - {name}
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+User=jamulus
+Group={group}
+NoNewPrivileges=true
+ProtectSystem=true
+Nice=-20
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+ExecStart=/bin/sh -c 'exec /usr/bin/jamulus-jamfan --nogui --server --port {port} --directoryserver rock.jamulus.io:22424 --serverinfo \"{name};;{cc}\" -u {maxcli} --jsonrpcport {rpcport} --jsonrpcsecretfile /secret.txt --jsonrpcbindip 0.0.0.0'
+Restart=on-failure
+RestartSec=30
+SyslogIdentifier=jamulus-rock
+
+[Install]
+WantedBy=multi-user.target''')
+" "$name" "$FLEET" > "$svc_tmp"
+    if scp -i ~/.ssh/id_ed25519 -o ConnectTimeout=30 -o BatchMode=yes "$svc_tmp" "$user@$host:/tmp/jamulus-rock.service" 2>/dev/null; then
+      ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=30 "$user@$host" "
+        sudo mv /tmp/jamulus-rock.service /etc/systemd/system/jamulus-rock.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable jamulus-rock 2>/dev/null || true
+        if ! sudo iptables -C INPUT -p tcp --dport ${rpcport} -j DROP 2>/dev/null; then
+          sudo iptables -I INPUT 1 -s 147.182.199.22 -p tcp --dport ${rpcport} -j ACCEPT 2>/dev/null || true
+          sudo iptables -I INPUT 2 -s 134.199.209.51 -p tcp --dport ${rpcport} -j ACCEPT 2>/dev/null || true
+          sudo iptables -I INPUT 3 -s 127.0.0.1 -p tcp --dport ${rpcport} -j ACCEPT 2>/dev/null || true
+          sudo iptables -A INPUT -p tcp --dport ${rpcport} -j DROP 2>/dev/null || true
+          sudo netfilter-persistent save 2>/dev/null || sudo iptables-save | sudo tee /etc/iptables/rules.v4 >/dev/null 2>/dev/null || true
+        fi
+      " 2>/dev/null && echo "    service file pushed." || echo "    service file install failed (non-fatal)"
+    else
+      echo "    service file SCP failed (non-fatal)"
+    fi
+    rm -f "$svc_tmp"
+  fi
 
   if [[ "$arch" == "aarch64" ]]; then
     if [[ -z "${BUILT_HOSTS[$host]:-}" ]]; then
       if [[ "$gcc13" == "1" && -n "$ARM64_U24_BINARY" ]]; then
         # Cross-deploy: a binary built on any ubuntu24/aarch64 host runs on all others.
         echo "    cross-deploying ubuntu24/aarch64 binary (no build needed) ..."
-        scp -i ~/.ssh/id_ed25519 "$ARM64_U24_BINARY" "$user@$host:/tmp/jamulus-jamfan"
-        ssh -i ~/.ssh/id_ed25519 "$user@$host" \
-            "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan && sudo chmod +x /usr/bin/jamulus-jamfan"
+        if ! scp -i ~/.ssh/id_ed25519 -o ConnectTimeout=30 -o BatchMode=yes "$ARM64_U24_BINARY" "$user@$host:/tmp/jamulus-jamfan" 2>/dev/null; then
+          [[ "$is_dormant" == "1" ]] && { echo "    SKIP_DORMANT $name — SCP failed (stopped mid-flight)"; continue; }
+          scp -i ~/.ssh/id_ed25519 "$ARM64_U24_BINARY" "$user@$host:/tmp/jamulus-jamfan"
+        fi
+        if ! ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=30 -o BatchMode=yes "$user@$host" \
+            "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan && sudo chmod +x /usr/bin/jamulus-jamfan && $APPLY_RSYSLOG" 2>/dev/null; then
+          [[ "$is_dormant" == "1" ]] && { echo "    SKIP_DORMANT $name — SSH failed (stopped mid-flight)"; continue; }
+          ssh -i ~/.ssh/id_ed25519 "$user@$host" \
+              "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan && sudo chmod +x /usr/bin/jamulus-jamfan && $APPLY_RSYSLOG"
+        fi
         BUILT_HOSTS[$host]=1
       else
+        if [[ "$skip_nb" == "1" ]]; then
+          echo "    SKIPPED $name — skip_native_build=true and no cached binary available; deploy another gcc13 host first"
+          continue
+        fi
         # Pre-flight: refuse to build if any service on this host has active clients.
         # A native build saturates the CPU and causes audio dropouts for live sessions.
         # Checks all RPC ports on this host, not just the service being deployed.
@@ -129,6 +240,19 @@ PYCHECK
           continue
         fi
 
+        host_services=$(python3 -c "
+import json
+fleet = json.load(open('$FLEET'))
+seen = []
+for s in fleet:
+    if s['host'] == '$host':
+        svc = s.get('service', 'jamulus-headless')
+        if svc not in seen: seen.append(svc)
+print(' '.join(seen))
+")
+        echo "    stopping services on $host for build: $host_services ..."
+        ssh -i ~/.ssh/id_ed25519 "$user@$host" "sudo systemctl stop $host_services" 2>/dev/null || true
+
         BUILT_HOSTS[$host]=1
         echo "    rsyncing sources to $host ..."
         rsync -a \
@@ -146,6 +270,10 @@ lines = ['set -euo pipefail', 'cd /tmp/jamulus-build']
 if swapon != '-':
     lines.append(f'sudo swapon {swapon} 2>/dev/null || true')
 lines.append(f'{qmake} "CONFIG+=headless" "JAMFAN_REV={hex_rev}" Jamulus.pro')
+lines += [
+    'current_ver=$(strings /usr/bin/jamulus-jamfan 2>/dev/null | grep -o \'JAMFAN-[0-9a-f][0-9a-f]\' | head -1 || echo "")',
+    f'if [[ "$current_ver" != "JAMFAN-{hex_rev}" ]]; then make clean > /dev/null 2>&1 || true; fi',
+]
 if gcc13 == '1':
     # GCC 13 / Qt5 moc can't parse _GLIBCXX_VISIBILITY; strip it from moc_predefs.h.
     lines += [
@@ -154,7 +282,14 @@ if gcc13 == '1':
         r'printf "\n#undef _GLIBCXX_VISIBILITY\n#define _GLIBCXX_VISIBILITY(V)\n" >> release/moc_predefs.h',
     ]
 lines.append('make -j1' if jobs == '1' else 'make -j$(nproc)')
-lines += ['sudo mv Jamulus /usr/bin/jamulus-jamfan', 'sudo chmod +x /usr/bin/jamulus-jamfan']
+import base64 as _b64
+_rule = ':msg, contains, "QObject: Cannot create children for a parent that is in a different thread" stop\n'
+_b64str = _b64.b64encode(_rule.encode()).decode()
+lines += [
+    'sudo mv Jamulus /usr/bin/jamulus-jamfan',
+    'sudo chmod +x /usr/bin/jamulus-jamfan',
+    f'echo {_b64str} | base64 -d | sudo tee /etc/rsyslog.d/90-suppress-jamulus.conf > /dev/null && sudo systemctl reload rsyslog 2>/dev/null || true',
+]
 print('\n'.join(lines))
 PYEOF
         if [[ "$gcc13" == "1" ]]; then
@@ -162,37 +297,107 @@ PYEOF
           scp -i ~/.ssh/id_ed25519 "$user@$host:/usr/bin/jamulus-jamfan" /tmp/jamfan-arm64-u24
           ARM64_U24_BINARY="/tmp/jamfan-arm64-u24"
         fi
+        echo "    restarting services on $host ..."
+        ssh -i ~/.ssh/id_ed25519 "$user@$host" "sudo systemctl start $host_services"
+        echo "    done."
+        continue
       fi
     fi
-    ssh -i ~/.ssh/id_ed25519 "$user@$host" "sudo systemctl restart $service"
-    echo "    done."
+    active=$(ssh -i ~/.ssh/id_ed25519 "$user@$host" python3 <<PYCHECK 2>/dev/null || true
+import socket, json
+try:
+    s = socket.socket(); s.connect(('127.0.0.1', ${rpcport})); s.settimeout(3)
+    secret = open('${secret_file}').read().strip()
+    def rpc(m, p={}):
+        s.sendall((json.dumps({'id':1,'jsonrpc':'2.0','method':m,'params':p})+'\n').encode())
+        return json.loads(s.recv(4096))
+    rpc('jamulus/apiAuth', {'secret': secret})
+    n = len(rpc('jamulusserver/getClients').get('result',{}).get('clients',[]))
+    if n > 0: print(f'{n} client(s)')
+    s.close()
+except:
+    pass
+PYCHECK
+)
+    if [[ -n "$active" && "$FORCE" == "0" ]]; then
+      echo "    binary updated, restart DEFERRED — $name has $active (use --force to override)"
+    else
+      ssh -i ~/.ssh/id_ed25519 "$user@$host" "sudo systemctl restart $service"
+      echo "    done."
+    fi
 
   else
-    scp -i ~/.ssh/id_ed25519 "$BINARY" "$user@$host:/tmp/jamulus-jamfan"
-    ssh -i ~/.ssh/id_ed25519 "$user@$host" \
-      "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan \
-       && sudo chmod +x /usr/bin/jamulus-jamfan \
-       && sudo systemctl restart $service"
-    echo "    done."
+    SSH_OPTS="-i ~/.ssh/id_ed25519 -o ConnectTimeout=30 -o BatchMode=yes"
+    if ! scp $SSH_OPTS "$BINARY" "$user@$host:/tmp/jamulus-jamfan" 2>/dev/null; then
+      [[ "$is_dormant" == "1" ]] && { echo "    SKIP_DORMANT $name — SCP failed (stopped mid-flight)"; continue; }
+      scp -i ~/.ssh/id_ed25519 "$BINARY" "$user@$host:/tmp/jamulus-jamfan"
+    fi
+    if ! ssh $SSH_OPTS "$user@$host" \
+      "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan && sudo chmod +x /usr/bin/jamulus-jamfan && $APPLY_RSYSLOG" 2>/dev/null; then
+      [[ "$is_dormant" == "1" ]] && { echo "    SKIP_DORMANT $name — SSH failed (stopped mid-flight)"; continue; }
+      ssh -i ~/.ssh/id_ed25519 "$user@$host" \
+        "sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan && sudo chmod +x /usr/bin/jamulus-jamfan && $APPLY_RSYSLOG"
+    fi
+    active=$(ssh -i ~/.ssh/id_ed25519 "$user@$host" python3 <<PYCHECK 2>/dev/null || true
+import socket, json
+try:
+    s = socket.socket(); s.connect(('127.0.0.1', ${rpcport})); s.settimeout(3)
+    secret = open('${secret_file}').read().strip()
+    def rpc(m, p={}):
+        s.sendall((json.dumps({'id':1,'jsonrpc':'2.0','method':m,'params':p})+'\n').encode())
+        return json.loads(s.recv(4096))
+    rpc('jamulus/apiAuth', {'secret': secret})
+    n = len(rpc('jamulusserver/getClients').get('result',{}).get('clients',[]))
+    if n > 0: print(f'{n} client(s)')
+    s.close()
+except:
+    pass
+PYCHECK
+)
+    if [[ -n "$active" && "$FORCE" == "0" ]]; then
+      echo "    binary updated, restart DEFERRED — $name has $active (use --force to override)"
+    else
+      ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=30 "$user@$host" "sudo systemctl restart $service" 2>/dev/null \
+        || { [[ "$is_dormant" == "1" ]] && echo "    SKIP_DORMANT $name — restart failed (stopped mid-flight)"; continue; }
+      echo "    done."
+    fi
   fi
 done
 
 # Keep jamfan22's fleet-server-ips.txt in sync with fleet.json
 # 147.182.199.22 = lounge — trusted caller for /ip-allowed, not a game server
-{ python3 -c "
-import json
+{ DORMANT_IPS="$DORMANT_IPS" python3 -c "
+import json, os
 fleet = json.load(open('$FLEET'))
+dormant_ips = json.loads(os.environ.get('DORMANT_IPS', '{}'))
+seen = set()
 for s in fleet:
-    ip = s['host']
+    iid = s.get('instance_id', '')
+    ip = dormant_ips.get(iid, s['host']) if iid else s['host']
     port = s.get('port', 22224)
     rpcport = s.get('rpcport', 9999)
-    dirhost = 'jazz.jamulus.io' if s.get('service') == 'jamulus-jazz' else 'anygenre1.jamulus.io'
-    dirport = 22324 if s.get('service') == 'jamulus-jazz' else 22124
+    key = (ip, port)
+    if key in seen:
+        continue
+    seen.add(key)
+    if 'dirhost' in s:
+        dirhost, dirport = s['dirhost'], s['dirport']
+    else:
+        svc = s.get('service', 'jamulus-headless')
+        if svc == 'jamulus-jazz':
+            dirhost, dirport = 'jazz.jamulus.io', 22324
+        elif svc == 'jamulus-ag2':
+            dirhost, dirport = 'anygenre2.jamulus.io', 22224
+        elif svc in ('jamulus-ag3', 'jamulus-ag3-sidecar'):
+            dirhost, dirport = 'anygenre3.jamulus.io', 22624
+        elif svc == 'jamulus-rock':
+            dirhost, dirport = 'rock.jamulus.io', 22424
+        else:
+            dirhost, dirport = 'anygenre1.jamulus.io', 22124
     print(f'{ip}:{port}:{rpcport}:{dirhost}:{dirport}')
 "
 echo "147.182.199.22"
 echo "24.199.107.192"
-for p in 22121 22122 22123 22124 22125 22126 22127; do echo "24.199.107.192:$p"; done
 } | ssh -i ~/.ssh/id_ed25519 root@jamulus.live \
     'cat > /root/JamFan22/JamFan22/data/fleet-server-ips.txt'
 echo "Fleet IPs synced to jamfan22."

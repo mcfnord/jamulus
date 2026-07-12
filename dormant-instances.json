@@ -1,0 +1,14 @@
+[
+    {"name": "Oregon",    "instance_id": "i-06ddba565bd9c4923", "region": "us-west-2",      "lat":  45.52, "lon": -122.68, "threshold": 0.03,  "stop_streak": 2},
+    {"name": "Thailand",  "instance_id": "i-099735c6c503df389", "region": "ap-southeast-7", "lat":  13.75, "lon":  100.52, "threshold": 0.8,   "stop_streak": 2},
+    {"name": "Milan",     "instance_id": "i-09b83690912a68d23", "region": "eu-south-1",     "lat":  45.46, "lon":    9.19, "threshold": 0.040, "stop_streak": 2},
+    {"name": "Formosa",   "instance_id": "i-06b04ddd88b774d8b", "region": "ap-east-2",      "lat":  25.05, "lon":  121.53, "threshold": 0.009, "stop_streak": 2},
+    {"name": "No Way",    "instance_id": "i-0ad15bd966f094fca", "region": "us-west-1",      "lat":  37.33, "lon": -121.89, "threshold": 0.1,   "stop_streak": 2},
+    {"name": "Montreal",  "instance_id": "i-08a1034ce0f284d44", "region": "ca-central-1",   "lat":  45.51, "lon":  -73.56, "threshold": 0.035, "stop_streak": 2},
+    {"name": "Paris",     "instance_id": "i-005b087f673d7cda4", "region": "eu-west-3",      "lat":  48.87, "lon":    2.33, "threshold": 0.5,   "stop_streak": 2},
+    {"name": "Sao Paulo", "instance_id": "i-0937a82a9419e8d91", "region": "sa-east-1",      "lat": -23.55, "lon":  -46.63, "threshold": 0.5,   "stop_streak": 2},
+    {"name": "Singapore", "instance_id": "i-0afd76c872838c844", "region": "ap-southeast-1", "lat":   1.35, "lon":  103.82, "threshold": 0.02,  "stop_streak": 2},
+    {"name": "Spain",     "instance_id": "i-04f081329630c48a7", "region": "eu-south-2",     "lat":  40.42, "lon":   -3.70, "threshold": 0.04,  "stop_streak": 2},
+    {"name": "Garibaldi", "instance_id": "i-037787a39428d9210", "region": "mx-central-1",   "lat":  19.43, "lon":  -99.13, "threshold": 0.05,  "stop_streak": 2},
+    {"name": "Calgary",   "instance_id": "i-0144e0d3958259f9d", "region": "ca-west-1",      "lat":  51.05, "lon": -114.07, "threshold": 0.03,  "stop_streak": 2}
+]
