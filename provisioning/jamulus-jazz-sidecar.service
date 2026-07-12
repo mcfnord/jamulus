@@ -1,0 +1,20 @@
+[Unit]
+Description=Jamulus Jazz sidecar server (port 3)
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+User=jamulus
+Group=nogroup
+NoNewPrivileges=true
+ProtectSystem=true
+Nice=-20
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+ExecStart=/bin/sh -c 'exec /usr/bin/jamulus-jamfan --nogui --server --port 22226 --directoryserver jazz.jamulus.io:22324 --serverinfo "Name;;CC" -u 6 --jsonrpcport 9997 --jsonrpcsecretfile /secret.txt --jsonrpcbindip 0.0.0.0'
+Restart=on-failure
+RestartSec=30
+SyslogIdentifier=jamulus-jazz-sidecar
+
+[Install]
+WantedBy=multi-user.target
