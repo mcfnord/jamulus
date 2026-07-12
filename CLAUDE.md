@@ -1,130 +1,141 @@
-# Jamulus Fork — mcfnord/jamulus
+# Jamulus Fork + Fleet — Operating Manual
 
-This is a fork of [jamulussoftware/jamulus](https://github.com/jamulussoftware/jamulus).
-The `main` branch tracks upstream. Custom work lives in the `jamfan` branch.
-Changes here are not expected to be accepted upstream.
+Fork of [jamulussoftware/jamulus](https://github.com/jamulussoftware/jamulus). `main` tracks upstream exactly; all custom work lives on `jamfan` (rebased onto `main`; history rewrite acceptable). Not intended for upstream except explicitly noted PRs. Open work: `TODO.md` here and `/root/TODO.md`.
 
 ## Building
 
-Qt 5.15 is required (available in standard Ubuntu/Debian repos).
+Qt 5.15 required.
 
 ```bash
 sudo apt-get install -y build-essential qtbase5-dev qt5-qmake qtmultimedia5-dev \
-    qttools5-dev-tools libjack-jackd2-dev
+    qttools5-dev-tools libjack-jackd2-dev libqt5websockets5-dev
 qmake "CONFIG+=headless" Jamulus.pro
 make -j$(nproc)
 ```
 
-The binary is `./Jamulus`. Run as a server with `--server --nogui`.
+Binary: `./Jamulus`. Server mode: `--server --nogui`. Feature logging:
+`QT_LOGGING_RULES="jamulus.chatreporter=true;jamulus.centraldefense=true"`.
 
-Enable custom feature logging:
+**Runtime dependency (binaries built after 2026-07-04): `libqt5websockets5`.** The fleet-rpc-channel work links QWebSockets. A host without it crash-loops with `libQt5WebSockets.so.5: cannot open shared object file` (this took Milan down for 655 restarts on 2026-07-07). provision.sh must install it; every deploy must end with an `ldd` check.
+
+## Custom features (all on `jamfan`)
+
+- **central-defense** (`src/centraldefense.cpp`): per-IP allow/deny via `GET https://jamulus.live/ip-allowed/{ip}`. Gates the UDP audio path before `PutAudioData`. **Audio-thread law**: `shouldAllow()` never blocks — cache hit returns immediately; cache miss fails open and queues an async lookup (`QMetaObject::invokeMethod`, QueuedConnection). The pre-fix synchronous `QEventLoop::exec()` in this path silenced whole servers for up to 2s per cache expiry (fixed 2026-06-24). TTLs: blocked 5 min, allowed 20 s, error → allowed 20 s. Local allowlist `/etc/jamulus/ip-allowlist.txt` checked first.
+- **chat-reporter** (`src/chatreporter.cpp`): extracts URLs from chat → POST `/chat-url-server` (server builds) or `/chat-url-client` (client builds); handles `/stream` command; `reportClientInfo` computes GUID = MD5(name + phpCountryName + phpInstrumentName) and GETs `/player-identified/...`. Server builds fetch patterns from `jamulus.live/chat-patterns.txt` hourly; client builds use hardcoded `kPatterns[]` (line ~40). **The two lists must stay identical — add domains to both.**
+- **earlier-join-notification**: connection notification at the earliest socket step (`socket.cpp`, serverlogging).
+- **make_welcome**: Debian postinst creates `/etc/jamulus/welcome.html`.
+- **recording-banner-api**: `jamulusserver/setRecordingBanner {"active":bool}` — shows the red RECORDING banner without recording (`m_bExternalRecordingBanner`).
+
+**Standing rules:**
+- **GUID trap**: never use `CInstPictures::GetName()` for GUID computation — diverges from `phpInstrumentName` at indices 0, 1, 26, 27. JamFan22's `_instrumentNames[]` and `sampler.py` on 137.184.43.255 are the correct tables.
+- **rawaudio stays out**: the PCM/MAX probe (IDs 1036/1037) was fully reverted (`dd25a580`) — no MAX-capable server anywhere, especially Trio. `AQ_RAW` remains unreachable; keep it that way. (Historical note: that revert collaterally broke 1028 handling for ~32h in June 2026; 1028 is restored and is unrelated to rawaudio.)
+- **`checkAndLookup` stays in `OnNewConnection`** — it is the only gate against silent clients (audio-path gate never fires for them). The `QObject: Cannot create children…` thread warning it produces is non-fatal; the proper fix is dispatching it to the main thread via QueuedConnection, same pattern as `shouldAllow()`.
+
+## Fleet reference
+
+Config: `fleet.json` (names, hosts, users, `arch` [default x86_64], `os`, `gcc13_fix`, service names, ports, rpcports, `dormant`, `instance_id`, `cc`, `maxclients`). Standard server: service `jamulus-headless.service`, binary `/usr/bin/jamulus-jamfan`, UDP port 22224, JSON-RPC `--jsonrpcport 9999 --jsonrpcsecretfile /secret.txt --jsonrpcbindip 0.0.0.0` (jazz sidecars: 9998; rock: 9997). RPC ports firewalled to lounge (147.182.199.22) + jamulus.live (134.199.209.51); the secret is trivially `REDACTED-SECRET`.
+
+- **Deploy**: `./deploy.sh <name|all>` (builds, routes by arch/OS, syncs fleet-server-ips.txt to jamulus.live).
+- **Membership change without deploy**: `./sync-fleet-ips.sh` (also regenerates `fleet-rpc-ports.txt` — never edit either file by hand).
+- **Provision** (Ubuntu 24.04): `./provisioning/provision.sh <host> [user]`, then the checklist below.
+- **Dormant IPs are dynamic**: authoritative current IP is `/root/dormant-ip-cache.json` on jamulus.live, keyed by `instance_id`. fleet.json `host` goes stale for dormant entries after every restart.
+- **Swap is forbidden on fleet hosts** (latency spikes). Sole exception: transient swap for Harry's Docker rebuild, removed after.
+
+### Deploy verification (run after every deploy, per host)
+
 ```bash
-QT_LOGGING_RULES="jamulus.chatreporter=true;jamulus.centraldefense=true" ./Jamulus -s -n --nogui
+ssh <user>@<ip> 'file /usr/bin/jamulus-jamfan; uname -m;
+  ldd /usr/bin/jamulus-jamfan | grep -c "not found";
+  systemctl list-units "jamulus-*" --no-legend --plain'
+```
+Pass = arch matches, 0 missing libs, all services `active running` (re-check after 60s: restart counter stable), `--version` shows the new revision. The 2026-07-07 dual outage (ARM binary on x86_64 Maple; missing websockets lib on Milan) is exactly what this catches. `/deploy` skill automates it.
+
+### ABI / architecture pitfalls
+
+- **Never rsync the local x86-64 `Jamulus` binary to ARM hosts** — always `--exclude='Jamulus'` when rsyncing sources.
+- **Never mix OS groups**: Ubuntu 24.04 binary on 22.04 → `GLIBCXX_3.4.32 not found` crash. Ubuntu 26.04 exists (several dormant hosts run it — verified live 2026-07-07) and runs 24.04-built binaries fine; the reverse does not hold. Rising (22.04, no `gcc13_fix`) builds natively and is slated for replacement.
+- **Cross-deploy cache**: first-built aarch64/u24 binary cached at `/tmp/jamfan-arm64-u24`, reused for `gcc13_fix: true` hosts in the same run; delete to force rebuild. deploy.sh compares cached rev to current and rebuilds when stale. Because the rev counter increments per run, a single-target run against a `skip_native_build` host (San Jose) always sees the cache as stale and skips — pin `jamfan-rev` to (cached rev − 1) first so the run's rev matches the cache. Same trick skips needless local x86 rebuilds when `./Jamulus` already holds the current source (sources unchanged since its build).
+- **GCC 13 moc fix** (Ubuntu 24.04): deploy.sh applies it automatically for `gcc13_fix: true`. Manual: build `release/moc_predefs.h`, append `#undef _GLIBCXX_VISIBILITY` / `#define _GLIBCXX_VISIBILITY(V)`, then `make`.
+- **Freiheit/Jazzkeller share a host** — native builds there cause dropouts; deploy.sh pre-flight blocks builds when clients are present.
+
+### Provisioning checklist (after provision.sh)
+
+1. Console: append the ed25519 pubkey (`root@test-jamulus-jamfan`) to `~/.ssh/authorized_keys`.
+2. `./provisioning/provision.sh <host> [user]`.
+3. `echo 'REDACTED-SECRET' > /secret.txt && chmod 644 /secret.txt` (must be world-readable — the `jamulus` user reads it).
+4. Extra instances: one service file each (`--port`, `--jsonrpcport`, `--serverinfo`, `-u <maxclients>`).
+5. `apt-get install -y libqt5websockets5` (until provision.sh includes it).
+6. iptables: RPC ports 9997–9999 restricted to lounge + jamulus.live; `iptables-persistent` + `netfilter-persistent save`.
+7. UDP buffer: `net.core.rmem_max=4194304 net.core.rmem_default=4194304` in `/etc/sysctl.d/99-jamulus.conf` (prevents dropouts under load).
+8. `systemctl daemon-reload && systemctl enable --now <services>`.
+9. Add all instances to fleet.json (`"lang": "Dutch"` for NL, etc.), then `./sync-fleet-ips.sh`.
+10. Verify against the provisioning quality bar in `/root/CLAUDE.md` (directory listing, `[IP-ALLOWED]`, welcome delivered).
+
+**Oracle Linux**: firewalld runs by default — need OCI security-list rules AND `firewall-cmd` (`--add-port=22224/udp`; rich rules for RPC TCP). Done on Turin.
+**Unreachable ASNs**: AS58955 (Bangmod, Bangkok) and AS197540 (netcup) cannot be provisioned on.
+**Docker server (Harry's, 35.89.21.63)**: image built from `/tmp/harry-docker/` (cleared on reboot — re-stage Dockerfile + binary first; Dockerfile master copy `/tmp/harry-Dockerfile` locally). Image must include `ca-certificates` or CentralDefense HTTPS fails. RAM-constrained rebuild: create 1G swap → stop service → stage → `docker build -t jamulus-harry .` → start service → remove swap.
+
+### Dormant instances
+
+Monitor: `dormant-monitor.py` runs on jamulus.live as `dormant-monitor.service` (every 20 min, boto3 start/stop by geographic demand). Live table: `ssh root@jamulus.live 'grep "\[DORMANT\]" /root/dormant-monitor.log | tail -20'`. Instance list AND per-instance thresholds live in `/root/dormant-instances.json` on jamulus.live (fields: name, instance_id, region, lat/lon, threshold, stop_streak, fleet_entries) — edit the JSON, then `systemctl restart dormant-monitor`. (The old `/root/dormant-thresholds.json` and in-script INSTANCES are gone — verified 2026-07-10.)
+
+Instance names are geographic, not server names: Oregon→Portland, Thailand→สวัสดีครับ, Milan→La Scala, Formosa/Taiwan→女巫店/藍調/The Wall (box name Formosa; 女巫店 ex-Riverside, 藍調 ex-Legacy — renamed 2026-07-12), San Jose→No Way/Studio F, Montreal→Maple, Paris→Louvre, São Paulo→Paulista, Singapore→Esplanade, Spain→Alhambra, Mexico City→Garibaldi, Calgary→Stampede, Ohio→Agora, Virginia→The National, Hong Kong→Wan Chai, Zurich→Tonhalle/Moods.
+
+Demand table (`ssh root@jamulus.live 'python3 /tmp/demand_scores.py'`) — always render as markdown with a % column (score/threshold × 100), **ON** bold for running:
+
+| City | Score | Threshold | % | Status |
+|------|------:|----------:|--:|--------|
+| Oregon | 0.0252 | 0.02 | 126% | **ON** |
+
+`demand_scores.py` reads the same `/root/dormant-instances.json` — no separate sync needed.
+
+### gjstress — capacity stress tool
+
+Binary: `/root/gojam/gjstress` (local), `/usr/local/bin/gjstress` (lounge). Source `mcfnord/gojam cmd/gjstress/`; build with `CGO_CFLAGS="-I/usr/include/opus" go build ./cmd/gjstress/`.
+
+**Run from the lounge only** (central command is CentralDefense-blocked). AWS/OCI need `--directory` hole-punch; Linode/DO don't.
+
+```bash
+ssh root@147.182.199.22 'gjstress --target <ip:port> --bots N --duration 2m --ramp 10s --tone [--directory anygenre1.jamulus.io:22124]'
 ```
 
-## Custom Features (all live in `jamfan`)
+`rx%` (expected ~375 packets/10s per bot): ok ≥80%, warn 50–79%, DEGRADED <50%. Before testing: raise the `-u` cap (sed + restart), restore after; check `free -m` on small hosts.
 
-### `central-defense`
-`src/centraldefense.cpp`: rejects server connections based on a per-IP lookup.
-Calls `GET https://jamulus.live/ip-allowed/{ip}` — returns `"true"` (allowed) or
-`"false"` (blocked). Fails open on any network error. Timeout: 2 seconds.
+### Fleet analysis scripts (local, run against jamulus.live data)
 
-The check happens synchronously at the UDP socket level (`socket.cpp`) via
-`CServer::CentralDefenseAllows()` → `CentralDefense::shouldAllow()`, before
-`PutAudioData` is called. Blocked IPs never get a channel allocated.
+- `/root/fleet_perf.py` — per-instance comparison (aggregate all servers on one IP; metrics: unique GUIDs with audible>0, minutes with audible ≥2 — bot-resistant). Run: `scp /root/fleet_perf.py /root/jamulus/fleet.json root@jamulus.live:/tmp/ && ssh root@jamulus.live python3 /tmp/fleet_perf.py`.
+- `/root/fleet-expansion-targets.py` — primary expansion-targeting tool: ranks non-fleet servers by unique GUIDs + active minutes (30d census), cross-references names from `/tmp/directory-*.json` on 137.184.43.255. Same scp+run pattern.
+- `/root/blocked_census.py` (long-running local poller → `~/blocked_census.csv`) + `/root/census_summary.py` (viewer) — covers servers that block the harvester.
+- Geo/ASN of a candidate IP: `curl "http://ip-api.com/json/<ip>?fields=query,country,city,org,as"`. Blocked-server capacity: `/var/www/html/blocked-servers.txt` on 137.184.43.255.
 
-Cache TTLs: blocked = 5 minutes, allowed = 2 minutes. On timeout/error, IP is
-cached as allowed (fail-open) for 2 minutes to avoid hammering a down backend.
+## Debugging deployments
 
-Local allowlist: `/etc/jamulus/ip-allowlist.txt` — one IP or CIDR per line,
-checked before any network lookup. `#` = comment, `!` prefix is stripped and
-the IP is still allowed.
+When a fix "isn't working": first `ssh <host> 'ls -la /usr/bin/jamulus-jamfan'` vs `git -C /root/jamulus log -1 --format="%ci" <commit>`. Binary older than commit → deploy, don't debug. Then run the deploy verification block above — arch, libs, and restart-loop state explain most "mysteries."
 
-### `chat-reporter`
-`src/chatreporter.cpp`: extracts all `https?://` URLs from chat messages and POSTs
-each as `{"url": "...", "port": N}` to `https://jamulus.live/chat-url-server` (server builds)
-or `https://jamulus.live/chat-url-client` (client builds). For server builds, the
-server IP is inferred from the TCP connection and combined with `port` to form
-`<ip>:<port>`. Fails silently if the endpoint is unreachable.
-Hooks into server (raw message text) and client (`ChatTextReceived` signal).
+## JSON-RPC
 
-**Pattern list coordination**: Server builds fetch their pattern list from
-`https://jamulus.live/chat-patterns.txt` at startup (refreshed hourly). Client builds
-use the hardcoded `kPatterns[]` array at `chatreporter.cpp:40`. JamFan22 also validates
-incoming `/chat-url-client` reports against `chat-patterns.txt` as a defense-in-depth
-filter. **The two lists must be identical.** A pattern missing from `chat-patterns.txt`
-is silently dropped by JamFan22; a pattern missing from `kPatterns[]` is never reported
-by client builds. When adding a domain to either place, add it to both.
+`./rpc.sh <server-name> <method> [json-params]` from this directory — routes through the lounge. Example: `./rpc.sh 'Hot Texas!' jamulusserver/getClients`.
 
-Also handles `/stream` chat commands: intercepts `/stream` text, POSTs
-`{"command":"stream","port":N,"weekly":false}` to `https://jamulus.live/chat-command-server`,
-and broadcasts the response back to all connected clients.
+**rpc.sh bug**: params containing JSON booleans/numbers get mangled through SSH. Workaround — inline Python on the lounge:
 
-`reportClientInfo(addr, name, countryId, instrument)` fires on each `ChanInfoHasChanged`
-event. Computes GUID as MD5(name + phpCountryName(countryId) + phpInstrumentName(instrument))
-matching the ping-join Python format, then GETs `/player-identified/{ip}?serverport=...&guid=...&channelId=...&nation=...`.
+```bash
+ssh root@147.182.199.22 'python3 -c "
+import socket, json
+s = socket.socket(); s.connect((\"<fleet-ip>\", 9999)); s.settimeout(5)
+def rpc(m, p={}):
+    s.sendall((json.dumps({\"id\":1,\"jsonrpc\":\"2.0\",\"method\":m,\"params\":p})+\"\n\").encode())
+    return json.loads(s.recv(4096))
+rpc(\"jamulus/apiAuth\", {\"secret\": \"REDACTED-SECRET\"})
+print(json.dumps(rpc(\"<method>\", {\"active\": False}), indent=2))
+s.close()"'
+```
 
-### `earlier-join-notification`
-Fires a connection notification at the earliest socket step, before the full handshake
-completes. Modifies `socket.cpp` and `serverlogging`.
+## Protocol notes
 
-### `make_welcome`
-Debian packaging: `postinst` creates `/etc/jamulus/welcome.html` on install. The systemd
-service already passes `-w /etc/jamulus/welcome.html` to the binary.
+- **1028 → 1015** (channel levels): fleet-only (our build). Never assume it on non-fleet servers.
+- **1014 → 1013** (client list): works on all standard Jamulus servers, connectionless. 1013's channel slot = the index in 1015 nibbles — correlate by slot for per-client levels.
+- **CLM_SEND_EMPTY_MESSAGE**: directory→server hole-punch instruction; server→client packets — they do NOT contaminate the correlation engine's client→server timing signal.
 
-### `recording-banner-api`
-Extends `src/serverrpc.cpp` with `jamulusserver/setRecordingBanner`. Accepts
-`{"active": true|false}`. When `true`, overrides the recorder state sent to all
-connected clients with `RS_RECORDING` (the red RECORDING banner), without starting
-the actual server recorder. Clears on `false`. Implemented via
-`CServer::m_bExternalRecordingBanner` flag checked in
-`CreateAndSendRecorderStateForAllConChannels`.
+## Windows client build
 
-## JamFan22 — backend at jamulus.live
-
-Host: `root@jamulus.live`, SSH key: `~/.ssh/id_ed25519`
-Service: `jamfan22.service` (ASP.NET Core 9, port 443)
-Log: `/root/JamFan22/JamFan22/output.log`
-Source: `/root/JamFan22/`
-
-Endpoints consumed by this Jamulus fork:
-- `GET /ip-allowed/{ip}` — central-defense IP check
-- `GET /chat-patterns.txt` — URL patterns for chat-reporter
-- `POST /chat-url-server` — receives `{"url": "...", "port": N}`; derives server as `<remoteIP>:<port>`
-- `POST /chat-url-client` — receives `{"url": "..."}` from client builds; derives server via client-IP → guid → server (TODO)
-
-## TODO
-
-- **Deploy PCM-capable binary to all fleet servers**: Once PCM audio is confirmed working end-to-end (client connects to Freiheit with AQ_RAW and negotiates uncompressed audio), run `./deploy.sh all` to push the new `jamfan` binary to all x86-64 fleet servers. Freiheit (aarch64) is already updated. The Duet servers (7 headless ping-harvester servers on 24.199.107.192) are not fleet servers — skip them. Do not deploy until end-to-end test passes.
-
-- **Windows client**: wire chat-reporter URL detection into the GUI client build; make the blue Jamulus logo open `https://jamulus.live`. Build via GitHub Actions: `git push origin jamfan:autobuild-jamfan`, download artifact, delete remote branch.
-
-- **Client URL abuse monitoring in JamFan22** (C# on `jamulus.live`, must be done before wide distribution): reuse ip-allowed block logic, apply `chat-patterns.txt` server-side (defense-in-depth), rate-limit by IP, fail closed, log source IP. Details in `jamulus/TODO.md`. Hand off to `claude` on `jamulus.live`.
-
-- **Windows client announcement + binary palette rollout**: announce to fleet users via welcome message once PCM + URL filtering are confirmed; publish GitHub Release for stable download URL; dismissable per-GUID banner; server binary; changelog at `jamulus.live/jamfan`. Details in `jamulus/TODO.md`.
-
-- **Propose `getClients` identification gate upstream**: After end-to-end testing, open a PR against `jamulussoftware/jamulus` for the two-line fix in `channel.h` (`IsIdentified()` getter) and `server.cpp` (`GetConCliParam` filter changed to `IsConnected() && IsIdentified()`). This is a generic correctness fix — `getClients` returning default-empty fields for channels in the pre-identification window is a bug for any RPC consumer, not just JamFan22. Unlike the JamFan features, this has no custom logic and is a clean upstream candidate.
-  - **Status**: PR submitted (draft): https://github.com/jamulussoftware/jamulus/pull/3716. Committed to `jamfan` as `bf1e951b`. **Note**: this fix addresses the timing race (unidentified client briefly visible with empty fields) but does NOT fix JamFan22's welcome self-exclusion bug — that bug is caused by JamFan22 reading wrong field names from the response (see `getClients` field name mismatch TODO below), not by timing.
-
-- **GUID computation standing trap**: never use `CInstPictures::GetName()` for GUID computation — diverges from `phpInstrumentName` at indices 0 (`"None"` vs `"-"`), 1 (`"Drum Set"` vs `"Drums"`), 26, and 27. JamFan22's `GetClientsAsync` uses `_instrumentNames[]` (matching `phpInstrumentName`); GUID parity confirmed 2026-06-11 (92.3% match across 274 fleet join events).
-
-- **Public RPC port — unauthenticated status API** (future): A second TCP listener on port 22224 (same number as the Jamulus UDP game port — no conflict since protocols differ). No `--jsonrpcport` or secret required; enabled by passing `--publicrpcport` flag (no argument). Operators who don't want it simply omit the flag. Because the port is well-known (always 22224/tcp), any client who knows a server's address can query it without asking the operator for a port number.
-
-  **Methods to expose on the public port** (all read-only, no privacy concern):
-  - `jamulus/getVersion` — server version
-  - `jamulus/getMode` — always `"server"` on a server binary
-  - `jamulusserver/getServerProfile` — name, city, country, welcome message, directory status (already public via directory)
-  - `jamulusserver/getRecorderStatus` — recording on/off
-  - `jamulusserver/getClients` — **omit the `address` field** (IP:port is private; name/instrument/country are already visible to session participants)
-
-  **Implementation**: `CRpcServer` gets a `HandlePublicMethod()` variant that adds to a separate `mapPublicMethodHandlers`. `ProcessMessage` checks that map before the auth gate. The public-port server is a second `CRpcServer` instance constructed with an empty secret; all methods registered on it via `HandlePublicMethod` are automatically unauthenticated. Fleet service files get `--publicrpcport` added; firewall rules open 22224/tcp to the world on each server.
-
-## Branch strategy
-`main` tracks upstream exactly — no custom commits. `jamfan` is rebased onto `main`
-(history rewrite is acceptable). Pull upstream into `main`, then `git rebase main jamfan`.
-
-## ARM64 deploy pitfalls
-
-**Never rsync the local `Jamulus` binary to ARM64 hosts.** The local build produces an x86-64 binary; rsyncing it to Turin/Freiheit/Rising without `--exclude='Jamulus'` overwrites the correct aarch64 binary with a broken one (silent failure — rsync succeeds, `sudo mv` succeeds, service crashes with "Exec format error"). Always add `--exclude='Jamulus'` when rsyncing sources to ARM64 build hosts.
-
-**Turin (Oracle Linux 9) additionally requires `qt5-linguist`** for `lrelease`. Without it, sequential `make` fails on the translation target before the linker runs and no binary is produced. Install once with `sudo dnf install -y qt5-linguist`; already done as of 2026-06-08.
+GitHub Actions: `git push origin jamfan:autobuild-jamfan`, download artifact, delete the remote branch. Rollout plan and URL-abuse prerequisites: `TODO.md`.
