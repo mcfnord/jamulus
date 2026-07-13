@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import os
 import socket
 import json
 import time
@@ -27,7 +28,9 @@ _ap.add_argument('--fleet', default=None, metavar='PATH',
 _ap = _ap.parse_args()
 POLL_INTERVAL = _ap.poll_ms / 1000
 
-SECRET = "REDACTED-SECRET"
+# RPC secret is kept out of source control: from env or a local file on this host.
+SECRET = (os.environ.get("JAMULUS_RPC_SECRET")
+          or open(os.path.expanduser(os.environ.get("JAMULUS_RPC_SECRET_FILE", "~/.jamulus-rpc-secret"))).read().strip())
 
 if _ap.fleet:
     with open(_ap.fleet) as _jf:

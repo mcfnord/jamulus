@@ -33,7 +33,7 @@ Binary: `./Jamulus`. Server mode: `--server --nogui`. Feature logging:
 
 ## Fleet reference
 
-Config: `fleet.json` (names, hosts, users, `arch` [default x86_64], `os`, `gcc13_fix`, service names, ports, rpcports, `dormant`, `instance_id`, `cc`, `maxclients`). Standard server: service `jamulus-headless.service`, binary `/usr/bin/jamulus-jamfan`, UDP port 22224, JSON-RPC `--jsonrpcport 9999 --jsonrpcsecretfile /secret.txt --jsonrpcbindip 0.0.0.0` (jazz sidecars: 9998; rock: 9997). RPC ports firewalled to lounge (147.182.199.22) + jamulus.live (134.199.209.51); the secret is trivially `REDACTED-SECRET`.
+Config: `fleet.json` (names, hosts, users, `arch` [default x86_64], `os`, `gcc13_fix`, service names, ports, rpcports, `dormant`, `instance_id`, `cc`, `maxclients`). Standard server: service `jamulus-headless.service`, binary `/usr/bin/jamulus-jamfan`, UDP port 22224, JSON-RPC `--jsonrpcport 9999 --jsonrpcsecretfile /secret.txt --jsonrpcbindip 0.0.0.0` (jazz sidecars: 9998; rock: 9997). RPC ports firewalled to lounge (147.182.199.22) + jamulus.live (134.199.209.51); the RPC secret lives in `/secret.txt` on each host and is supplied to local tooling via `~/.jamulus-rpc-secret` (kept out of source control).
 
 - **Deploy**: `./deploy.sh <name|all>` (builds, routes by arch/OS, syncs fleet-server-ips.txt to jamulus.live).
 - **Membership change without deploy**: `./sync-fleet-ips.sh` (also regenerates `fleet-rpc-ports.txt` — never edit either file by hand).
@@ -62,7 +62,7 @@ Pass = arch matches, 0 missing libs, all services `active running` (re-check aft
 
 1. Console: append the ed25519 pubkey (`root@test-jamulus-jamfan`) to `~/.ssh/authorized_keys`.
 2. `./provisioning/provision.sh <host> [user]`.
-3. `echo 'REDACTED-SECRET' > /secret.txt && chmod 644 /secret.txt` (must be world-readable — the `jamulus` user reads it).
+3. `cat ~/.jamulus-rpc-secret > /secret.txt && chmod 644 /secret.txt` (must be world-readable — the `jamulus` user reads it; secret value kept out of source control).
 4. Extra instances: one service file each (`--port`, `--jsonrpcport`, `--serverinfo`, `-u <maxclients>`).
 5. `apt-get install -y libqt5websockets5` (until provision.sh includes it).
 6. iptables: RPC ports 9997–9999 restricted to lounge + jamulus.live; `iptables-persistent` + `netfilter-persistent save`.
@@ -125,7 +125,7 @@ s = socket.socket(); s.connect((\"<fleet-ip>\", 9999)); s.settimeout(5)
 def rpc(m, p={}):
     s.sendall((json.dumps({\"id\":1,\"jsonrpc\":\"2.0\",\"method\":m,\"params\":p})+\"\n\").encode())
     return json.loads(s.recv(4096))
-rpc(\"jamulus/apiAuth\", {\"secret\": \"REDACTED-SECRET\"})
+rpc(\"jamulus/apiAuth\", {\"secret\": open(os.path.expanduser(\"~/.jamulus-rpc-secret\")).read().strip()})
 print(json.dumps(rpc(\"<method>\", {\"active\": False}), indent=2))
 s.close()"'
 ```

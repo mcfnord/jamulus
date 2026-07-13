@@ -17,6 +17,11 @@ NAME="$1"
 METHOD="$2"
 PARAMS="${3:-{}}"
 
+# RPC secret is kept out of source control: supply it via a local file.
+RPC_SECRET_FILE="${JAMULUS_RPC_SECRET_FILE:-$HOME/.jamulus-rpc-secret}"
+[[ -s "$RPC_SECRET_FILE" ]] || { echo "No RPC secret at $RPC_SECRET_FILE (set JAMULUS_RPC_SECRET_FILE)" >&2; exit 1; }
+RPC_SECRET="$(tr -d '\n' < "$RPC_SECRET_FILE")"
+
 read -r FLEET_HOST FLEET_RPCPORT < <(python3 -c "
 import json, sys
 fleet = json.load(open(sys.argv[1]))
@@ -30,16 +35,16 @@ sys.exit(1)
 " "$FLEET_JSON" "$NAME")
 
 # Run on the lounge; it connects to the fleet server's public IP:rpcport
-ssh -i "$SSH_KEY" "root@$LOUNGE_IP" python3 - "$FLEET_HOST" "$FLEET_RPCPORT" "$METHOD" "$PARAMS" << 'PYEOF'
+ssh -i "$SSH_KEY" "root@$LOUNGE_IP" python3 - "$FLEET_HOST" "$FLEET_RPCPORT" "$METHOD" "$PARAMS" "$RPC_SECRET" << 'PYEOF'
 import socket, json, sys
-host, rpcport, method, params = sys.argv[1], int(sys.argv[2]), sys.argv[3], json.loads(sys.argv[4])
+host, rpcport, method, params, secret = sys.argv[1], int(sys.argv[2]), sys.argv[3], json.loads(sys.argv[4]), sys.argv[5]
 s = socket.socket()
 s.connect((host, rpcport))
 s.settimeout(5)
 def rpc(m, p={}):
     s.sendall((json.dumps({'id':1,'jsonrpc':'2.0','method':m,'params':p})+'\n').encode())
     return json.loads(s.recv(4096))
-rpc('jamulus/apiAuth', {'secret': 'REDACTED-SECRET'})
+rpc('jamulus/apiAuth', {'secret': secret})
 print(json.dumps(rpc(method, params), indent=2))
 
 s.close()
