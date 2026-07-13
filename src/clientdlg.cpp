@@ -975,8 +975,9 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
                 QNetworkRequest req ( QUrl ( "https://jamulus.live/hibot/arrival" ) );
                 req.setHeader ( QNetworkRequest::ContentTypeHeader, "application/json" );
                 req.setHeader ( QNetworkRequest::UserAgentHeader, "Jamulus-HiBot/1.0" );
-                const QString secret = m_hibotSecret.isEmpty() ? QString ( "REDACTED-SECRET" ) : m_hibotSecret;
-                req.setRawHeader ( "X-HiBot-Secret", secret.toUtf8() );
+                // Secret is read from the operator's local secret file (see m_hibotSecret
+                // load). No hardcoded fallback: without the file the request 401s server-side.
+                req.setRawHeader ( "X-HiBot-Secret", m_hibotSecret.toUtf8() );
 
                 QNetworkReply* reply = m_hibotNam->post ( req, QJsonDocument ( body ).toJson ( QJsonDocument::Compact ) );
                 QObject::connect ( reply, &QNetworkReply::finished, this, [this, reply]() {

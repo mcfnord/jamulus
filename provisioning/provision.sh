@@ -23,6 +23,15 @@ ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
 echo "==> Copying binary"
 scp -i ~/.ssh/id_ed25519 "$BINARY" "$USER@$HOST:/tmp/jamulus-jamfan"
 
+# Fleet RPC secret is kept out of source control. Provide it via a local file
+# (default ~/.jamulus-rpc-secret) or the JAMULUS_RPC_SECRET_FILE env var.
+RPC_SECRET_FILE="${JAMULUS_RPC_SECRET_FILE:-$HOME/.jamulus-rpc-secret}"
+if [[ ! -s "$RPC_SECRET_FILE" ]]; then
+  echo "No RPC secret found at $RPC_SECRET_FILE."
+  echo "  Put the fleet RPC secret there (or set JAMULUS_RPC_SECRET_FILE), then re-run."
+  exit 1
+fi
+
 echo "==> Installing binary and dependencies"
 ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" '
   sudo mv /tmp/jamulus-jamfan /usr/bin/jamulus-jamfan
@@ -32,8 +41,10 @@ ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" '
   sudo systemctl reload rsyslog 2>/dev/null || true
   sudo adduser --system --quiet --home /nonexistent --no-create-home jamulus 2>/dev/null || true
   sudo mkdir -p /etc/jamulus && sudo touch /etc/jamulus/welcome.html
-  echo "REDACTED-SECRET" | sudo tee /secret.txt > /dev/null
 '
+
+# Write the RPC secret over stdin to avoid embedding it or hitting shell-quoting hazards.
+tr -d "\n" < "$RPC_SECRET_FILE" | ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" 'sudo tee /secret.txt > /dev/null'
 
 echo "==> Copying service file"
 scp -i ~/.ssh/id_ed25519 provisioning/jamulus-headless.service "$USER@$HOST:/tmp/jamulus-headless.service"
