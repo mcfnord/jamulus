@@ -215,6 +215,17 @@ CConnectDlg::CConnectDlg ( CClient* pNCliP, CClientSettings* pNSetP, const bool 
     tbtDeleteServerAddr->setAccessibleName ( tr ( "Delete server address button" ) );
     tbtDeleteServerAddr->setText ( u8"\u232B" );
 
+    // install event filter for tooltips on all widgets that define one
+    lblDirectory->installEventFilter ( this );
+    cbxDirectory->installEventFilter ( this );
+    lblFilter->installEventFilter ( this );
+    edtFilter->installEventFilter ( this );
+    chbExpandAll->installEventFilter ( this );
+    lvwServers->installEventFilter ( this );
+    lblServerAddr->installEventFilter ( this );
+    cbxServerAddr->installEventFilter ( this );
+    tbtDeleteServerAddr->installEventFilter ( this );
+
     UpdateDirectoryComboBox();
 
     // init server address combo box (max MAX_NUM_SERVER_ADDR_ITEMS entries)
@@ -1203,4 +1214,16 @@ void CConnectDlg::OnCurrentServerItemChanged ( QTreeWidgetItem* current, QTreeWi
     }
     QAccessible::updateAccessibility ( new QAccessibleAnnouncementEvent ( lvwServers, announcement ) );
 #endif
+}
+
+bool CConnectDlg::eventFilter ( QObject* obj, QEvent* event )
+{
+    if ( event->type() == QEvent::ToolTip )
+    {
+        // return true to suppress tooltip, false to allow it
+        return !pSettings->bShowToolTips;
+    }
+
+    // continue with normal processing for other events
+    return QObject::eventFilter ( obj, event );
 }

@@ -118,6 +118,8 @@ protected:
     virtual void showEvent ( QShowEvent* );
     virtual void hideEvent ( QHideEvent* );
 
+    bool eventFilter ( QObject* obj, QEvent* event );
+
     CMappedTreeWidgetItem* FindListViewItem ( const CHostAddress& InetAddr );
     CMappedTreeWidgetItem* GetParentListViewItem ( QTreeWidgetItem* pItem );
     void                   DeleteAllListViewItemChilds ( QTreeWidgetItem* pItem );
