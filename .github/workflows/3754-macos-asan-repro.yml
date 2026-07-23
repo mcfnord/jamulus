@@ -44,10 +44,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Qt (aqtinstall, matches bump-dependencies.yaml pinning)
+      - name: Install Qt (aqtinstall via venv + qtmultimedia module, matching .github/autobuild/mac.sh)
         run: |
-          python3 -m pip install --break-system-packages "aqtinstall==3.3.0"
-          python3 -m aqt install-qt mac desktop "${{ env.QT_VERSION }}" clang_64 -O ~/qt
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install "aqtinstall==3.3.0"
+          python3 -m aqt install-qt --outputdir ~/qt mac desktop "${{ env.QT_VERSION }}" \
+            --archives qtbase qttools qttranslations --modules qtmultimedia
+          deactivate
+          rm -rf venv
 
       - name: qmake + make with ASan
         run: |
