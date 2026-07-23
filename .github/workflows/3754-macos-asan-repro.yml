@@ -18,15 +18,18 @@
 
 name: 3754-macos-asan-repro (manual sketch)
 
+# workflow_dispatch would need this file merged to the default branch to be dispatchable
+# via API/UI (a GitHub quirk: --ref only selects which branch's code runs, not where the
+# trigger can live). Using on: push instead so the branch push itself fires it, with no
+# need to touch main. To re-run, push an empty commit to this branch.
 on:
-  workflow_dispatch:
-    inputs:
-      iterations:
-        description: "Stress iterations per quit path"
-        default: "200"
-      qt_version:
-        description: "Qt version to build against"
-        default: "6.10.2"
+  push:
+    branches:
+      - 3754-macos-asan-repro
+
+env:
+  ITERATIONS: "200"
+  QT_VERSION: "6.10.2"
 
 jobs:
   macos-asan-stress:
@@ -44,11 +47,11 @@ jobs:
       - name: Install Qt (aqtinstall, matches bump-dependencies.yaml pinning)
         run: |
           pip install "aqtinstall==3.3.0"
-          python3 -m aqt install-qt mac desktop "${{ inputs.qt_version }}" clang_64 -O ~/qt
+          python3 -m aqt install-qt mac desktop "${{ env.QT_VERSION }}" clang_64 -O ~/qt
 
       - name: qmake + make with ASan
         run: |
-          QT_DIR=~/qt/${{ inputs.qt_version }}/macos
+          QT_DIR=~/qt/${{ env.QT_VERSION }}/macos
           "$QT_DIR/bin/qmake" Jamulus.pro \
             "QMAKE_CXXFLAGS+=-fsanitize=address -fno-omit-frame-pointer -g -O1" \
             "QMAKE_LFLAGS+=-fsanitize=address"
@@ -57,7 +60,7 @@ jobs:
       - name: Stress — close-button path (JAMULUS_AUTOCLOSE_MS)
         run: |
           mkdir -p asan-out
-          for i in $(seq 1 "${{ inputs.iterations }}"); do
+          for i in $(seq 1 "${{ env.ITERATIONS }}"); do
             ms=$(( (RANDOM % 1400) + 150 ))
             ASAN_OPTIONS=abort_on_error=1:log_path=asan-out/autoclose_$i \
               JAMULUS_AUTOCLOSE_MS=$ms ./Jamulus.app/Contents/MacOS/Jamulus || true
@@ -65,7 +68,7 @@ jobs:
 
       - name: Stress — direct-quit path (JAMULUS_DIRECTQUIT_MS, skips closeEvent)
         run: |
-          for i in $(seq 1 "${{ inputs.iterations }}"); do
+          for i in $(seq 1 "${{ env.ITERATIONS }}"); do
             ms=$(( (RANDOM % 1400) + 150 ))
             ASAN_OPTIONS=abort_on_error=1:log_path=asan-out/directquit_$i \
               JAMULUS_DIRECTQUIT_MS=$ms ./Jamulus.app/Contents/MacOS/Jamulus || true
