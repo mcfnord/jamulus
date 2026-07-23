@@ -46,6 +46,8 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QTimer>
+#include <cstdlib>
 #include <iostream>
 #include "global.h"
 #ifndef HEADLESS
@@ -1010,6 +1012,30 @@ int main ( int argc, char** argv )
 
                 // show dialog
                 ClientDlg.show();
+
+                // TEST-ONLY auto-close hook (env-gated; no effect on stock runs).
+                // Drives the exact user-close teardown path (closeEvent -> pClient->Stop()
+                // -> Sound.Stop()) so exit crashes can be reproduced under a stress loop.
+                // See #3754 investigation, DISCOVERIES.md.
+                if ( const char* pcAutoCloseMs = ::getenv ( "JAMULUS_AUTOCLOSE_MS" ) )
+                {
+                    const int iMs = ::atoi ( pcAutoCloseMs );
+                    QTimer::singleShot ( iMs, &ClientDlg, SLOT ( close() ) );
+                    QTimer::singleShot ( iMs + 1500, pApp, SLOT ( quit() ) ); // backstop
+                }
+
+                // TEST-ONLY direct-quit hook (env-gated; no effect on stock runs).
+                // Skips ClientDlg.close() entirely, so closeEvent()/pClient->Stop() never
+                // runs before QApplication::quit() tears down the event loop -- this is
+                // the Cmd+Q / Dock-Quit / session-logout shaped path, since Qt's
+                // QApplication::quit() does not invoke closeEvent on open windows.
+                // Exercises Theory 4 from the #3754 investigation (DISCOVERIES.md):
+                // does anything still touch live audio/network state before ~CClient runs?
+                if ( const char* pcDirectQuitMs = ::getenv ( "JAMULUS_DIRECTQUIT_MS" ) )
+                {
+                    const int iMs = ::atoi ( pcDirectQuitMs );
+                    QTimer::singleShot ( iMs, pApp, SLOT ( quit() ) );
+                }
 
                 pApp->exec();
             }

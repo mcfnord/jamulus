@@ -1,0 +1,88 @@
+# Scratch workflow for the #3754 "macOS crash on exit" investigation. workflow_dispatch
+# only, deliberately not wired into autobuild.yml's release matrix (no signing/notarization,
+# no interaction with the real release pipeline).
+#
+# Context: foobarth's report (jamulussoftware/jamulus#3754) is on macOS 26.5.1, Apple
+# Silicon M1 Pro. ~6000 clean ASan/TSan/stock teardowns on Linux (see DISCOVERIES.md)
+# could not reproduce it, localizing the bug as macOS-specific in manifestation. This job
+# runs the same env-gated quit-hook stress loop (JAMULUS_AUTOCLOSE_MS / JAMULUS_DIRECTQUIT_MS,
+# added to src/main.cpp on this branch) under clang ASan on macos-26 (arm64, Xcode 26.5
+# default) -- matching foobarth's architecture and OS closely, unlike the repo's own
+# autobuild.yml which is pinned to macos-15 (Sequoia).
+#
+# Caveat: GitHub's macOS runners are VMs (Apple Virtualization Framework) on Azure-hosted
+# Apple Silicon hardware, not bare metal -- the leading theory is a teardown thread race,
+# and a hypervisor layer can shift scheduling enough to mask or alter a race the same way
+# ASan's own instrumentation already did on Linux. A clean run here is informative, not
+# conclusive.
+
+name: 3754-macos-asan-repro (manual sketch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Stress iterations per quit path"
+        default: "200"
+      qt_version:
+        description: "Qt version to build against"
+        default: "6.10.2"
+
+jobs:
+  macos-asan-stress:
+    runs-on: macos-26
+    timeout-minutes: 180
+    steps:
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90
+        with:
+          xcode-version: "26.5"
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Qt (aqtinstall, matches bump-dependencies.yaml pinning)
+        run: |
+          pip install "aqtinstall==3.3.0"
+          python3 -m aqt install-qt mac desktop "${{ inputs.qt_version }}" clang_64 -O ~/qt
+
+      - name: qmake + make with ASan
+        run: |
+          QT_DIR=~/qt/${{ inputs.qt_version }}/macos
+          "$QT_DIR/bin/qmake" Jamulus.pro \
+            "QMAKE_CXXFLAGS+=-fsanitize=address -fno-omit-frame-pointer -g -O1" \
+            "QMAKE_LFLAGS+=-fsanitize=address"
+          make -j"$(sysctl -n hw.ncpu)"
+
+      - name: Stress — close-button path (JAMULUS_AUTOCLOSE_MS)
+        run: |
+          mkdir -p asan-out
+          for i in $(seq 1 "${{ inputs.iterations }}"); do
+            ms=$(( (RANDOM % 1400) + 150 ))
+            ASAN_OPTIONS=abort_on_error=1:log_path=asan-out/autoclose_$i \
+              JAMULUS_AUTOCLOSE_MS=$ms ./Jamulus.app/Contents/MacOS/Jamulus || true
+          done
+
+      - name: Stress — direct-quit path (JAMULUS_DIRECTQUIT_MS, skips closeEvent)
+        run: |
+          for i in $(seq 1 "${{ inputs.iterations }}"); do
+            ms=$(( (RANDOM % 1400) + 150 ))
+            ASAN_OPTIONS=abort_on_error=1:log_path=asan-out/directquit_$i \
+              JAMULUS_DIRECTQUIT_MS=$ms ./Jamulus.app/Contents/MacOS/Jamulus || true
+          done
+
+      - name: Collect any crash reports too (belt and suspenders)
+        if: always()
+        run: |
+          mkdir -p crash-out
+          cp -a ~/Library/Logs/DiagnosticReports/*.ips crash-out/ 2>/dev/null || true
+
+      - name: Upload ASan + crash artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3754-macos-asan-results
+          path: |
+            asan-out/**
+            crash-out/**
+          if-no-files-found: ignore
