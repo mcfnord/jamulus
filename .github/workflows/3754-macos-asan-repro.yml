@@ -46,7 +46,7 @@ jobs:
 
       - name: Install Qt (aqtinstall, matches bump-dependencies.yaml pinning)
         run: |
-          pip install "aqtinstall==3.3.0"
+          python3 -m pip install "aqtinstall==3.3.0"
           python3 -m aqt install-qt mac desktop "${{ env.QT_VERSION }}" clang_64 -O ~/qt
 
       - name: qmake + make with ASan
