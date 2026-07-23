@@ -59,7 +59,8 @@ jobs:
           QT_DIR=~/qt/${{ env.QT_VERSION }}/macos
           "$QT_DIR/bin/qmake" Jamulus.pro \
             "QMAKE_APPLE_DEVICE_ARCHS=arm64" "QT_ARCH=arm64" \
-            "QMAKE_CXXFLAGS+=-fsanitize=address -fno-omit-frame-pointer -g -O1" \
+            "QMAKE_CXXFLAGS+=-fsanitize=address -fno-omit-frame-pointer -g -O1 -Wno-error=implicit-function-declaration" \
+            "QMAKE_CFLAGS+=-Wno-error=implicit-function-declaration" \
             "QMAKE_LFLAGS+=-fsanitize=address"
           make -j"$(sysctl -n hw.ncpu)"
 
