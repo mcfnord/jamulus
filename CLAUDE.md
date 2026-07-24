@@ -16,7 +16,24 @@ make -j$(nproc)
 Binary: `./Jamulus`. Server mode: `--server --nogui`. Feature logging:
 `QT_LOGGING_RULES="jamulus.chatreporter=true;jamulus.centraldefense=true"`.
 
+**Smoke-test kill discipline (local test binaries).** `cd X && ./Jamulus … &` backgrounds the *whole compound*, so `$!` is a subshell PID — SIGTERM kills the wrapper and orphans the real process (which keeps the UDP port). Put `cd` on its own line so `&` applies to the binary alone, then `$!` is the real PID. And never `pkill -f <pattern>` from an agent shell: the pattern matches the shell's own `bash -c` command line and kills the session (exit 144). Find strays with `pgrep -x Jamulus`; kill by exact PID. A clean shutdown logs `OnHandledSignal: 15` — its absence means the signal never reached Jamulus.
+
 **Runtime dependency (binaries built after 2026-07-04): `libqt5websockets5`.** The fleet-rpc-channel work links QWebSockets. A host without it crash-loops with `libQt5WebSockets.so.5: cannot open shared object file` (this took Milan down for 655 restarts on 2026-07-07). provision.sh must install it; every deploy must end with an `ldd` check.
+
+## Upstream PRs (jamulussoftware/jamulus)
+
+Upstream `CONTRIBUTING.md` is not auto-loaded context — read it before starting any upstream-bound change. (This section migrates to upstream `AGENTS.md` when that lands; the draft on the `agent-deploy-docs` branch already carries these rules, and PR #3793 adds the CONTRIBUTING.md pointer to it.)
+
+- **Style, before every commit**: `clang-format-14 -i` on all touched `.cpp/.h/.mm` (installed locally 2026-07-18; CI pins clang-format **14** in `.github/workflows/coding-style-check.yml`). `make clang_format` is the repo target but invokes unversioned `clang-format`, which this box doesn't have. Beware `AlignConsecutiveDeclarations`: widening one declaration's type re-pads its *neighbors* — this cost PR #3800 a red X.
+- Qt ≥ 5.12.2 APIs only (`QT_VERSION_CHECK` guards); C++11; smallest-possible single-topic PRs; features agreed in an issue/Discussion before coding.
+- Working pattern (issue #3798 → PR #3800): worktree off freshly fetched `main` in the scratchpad (never build upstream code in `/root/jamulus` — it clobbers the deploy-cached `./Jamulus`), full build + headless SIGTERM smoke test, push branch to fork, `gh pr create --repo jamulussoftware/jamulus --head mcfnord:<branch> --draft`.
+
+## Wiki/docs PRs (jamulussoftware/jamuluswebsite)
+
+Separate repo from the fork above (the wiki content, e.g. `wiki/en/*.md`). Style guide: https://jamulus.io/contribute/Style-and-Tone.
+
+- **No em-dash characters** — use a plain ASCII hyphen instead. Reviewer pljones flags this as an LLM tell on every PR ("As ever, ...", PR #1156); treat it as a hard rule for any generated Markdown before opening the PR, not just a suggestion to fix if caught. **Scope: this is a jamuluswebsite/pljones-reviewer constraint only.** The operator personally welcomes em-dashes and wants them used where merited in code-repo (jamulussoftware/jamulus) issue/PR comments and elsewhere — do not strip em-dashes outside wiki PRs.
+- **Prefer hedged over absolute phrasing**: avoid blanket claims like "costs nothing" (PR #1150); "discouraged" over "not recommended", "up to N" over "less than N" when the claim is a soft guideline rather than a hard limit (PR #1134).
 
 ## Custom features (all on `jamfan`)
 
@@ -48,7 +65,7 @@ ssh <user>@<ip> 'file /usr/bin/jamulus-jamfan; uname -m;
   ldd /usr/bin/jamulus-jamfan | grep -c "not found";
   systemctl list-units "jamulus-*" --no-legend --plain'
 ```
-Pass = arch matches, 0 missing libs, all services `active running` (re-check after 60s: restart counter stable), `--version` shows the new revision. The 2026-07-07 dual outage (ARM binary on x86_64 Maple; missing websockets lib on Milan) is exactly what this catches. `/deploy` skill automates it.
+Pass = arch matches, 0 missing libs, all services `active running` (re-check after 60s: restart counter stable), `--version` shows the new revision. The 2026-07-07 dual outage (ARM binary on x86_64 Maple; missing websockets lib on Milan) is exactly what this catches. As of 2026-07-17 deploy.sh runs this phase itself at the end of every run (exits 1 on failure; deferred-restart hosts get binary-only checks; first real run still unexercised — watch it). The `/deploy` skill also verifies; the manual block above is for spot checks.
 
 ### ABI / architecture pitfalls
 
@@ -79,7 +96,9 @@ Pass = arch matches, 0 missing libs, all services `active running` (re-check aft
 
 Monitor: `dormant-monitor.py` runs on jamulus.live as `dormant-monitor.service` (every 20 min, boto3 start/stop by geographic demand). Live table: `ssh root@jamulus.live 'grep "\[DORMANT\]" /root/dormant-monitor.log | tail -20'`. Instance list AND per-instance thresholds live in `/root/dormant-instances.json` on jamulus.live (fields: name, instance_id, region, lat/lon, threshold, stop_streak, fleet_entries) — edit the JSON, then `systemctl restart dormant-monitor`. (The old `/root/dormant-thresholds.json` and in-script INSTANCES are gone — verified 2026-07-10.)
 
-Instance names are geographic, not server names: Oregon→Portland, Thailand→สวัสดีครับ, Milan→La Scala, Formosa/Taiwan→女巫店/藍調/The Wall (box name Formosa; 女巫店 ex-Riverside, 藍調 ex-Legacy — renamed 2026-07-12), San Jose→No Way/Studio F, Montreal→Maple, Paris→Louvre, São Paulo→Paulista, Singapore→Esplanade, Spain→Alhambra, Mexico City→Garibaldi, Calgary→Stampede, Ohio→Agora, Virginia→The National, Hong Kong→Wan Chai, Zurich→Tonhalle/Moods.
+**Fleet-wide deploy incl. dormants:** a dormant must be *running* to receive a deploy. Wake all dormants, then **stop `dormant-monitor.service` for the whole `deploy.sh all` run** and restart it after — otherwise a dormant woken at the start of the run gets re-slept before deploy.sh reaches it (the full run outlasts a dormant's ~20-min uptime window; a single host's deploy is only ~1–2 min, so per-host time is never the problem).
+
+Instance names are geographic, not server names: Oregon→Portland, Thailand→Krub Club, Milan→La Scala, Taiwan→女巫店/藍調/The Wall (box name Taipei, ex-Formosa — renamed 2026-07-15; 女巫店 ex-Riverside, 藍調 ex-Legacy — renamed 2026-07-12), San Jose→No Way/Studio F, Montreal→Maple, Paris→Louvre, São Paulo→Paulista, Singapore→Esplanade, Spain→Alhambra, Mexico City→Garibaldi, Calgary→Stampede, Ohio→Agora, Virginia→The National, Hong Kong→Wan Chai, Zurich→Tonhalle/Moods.
 
 Demand table (`ssh root@jamulus.live 'python3 /tmp/demand_scores.py'`) — always render as markdown with a % column (score/threshold × 100), **ON** bold for running:
 

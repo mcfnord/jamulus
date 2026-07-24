@@ -80,6 +80,20 @@
     "maxclients": 8
   },
   {
+    "name": "Piper Club",
+    "host": "92.4.218.204",
+    "user": "opc",
+    "lang": "Italian",
+    "arch": "aarch64",
+    "os": "oracle-linux-9",
+    "qmake_cmd": "/usr/bin/qmake-qt5",
+    "service": "jamulus-rock",
+    "port": 22227,
+    "rpcport": 9996,
+    "cc": "IT",
+    "maxclients": 8
+  },
+  {
     "name": "Sindone",
     "host": "92.4.218.204",
     "user": "opc",
@@ -113,20 +127,6 @@
     "port": 22226,
     "rpcport": 9997,
     "skip": true
-  },
-  {
-    "name": "Piper Club",
-    "host": "92.4.218.204",
-    "user": "opc",
-    "lang": "Italian",
-    "arch": "aarch64",
-    "os": "oracle-linux-9",
-    "qmake_cmd": "/usr/bin/qmake-qt5",
-    "service": "jamulus-rock",
-    "port": 22227,
-    "rpcport": 9996,
-    "cc": "IT",
-    "maxclients": 8
   },
   {
     "name": "Rising",
