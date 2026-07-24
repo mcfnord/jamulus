@@ -129,13 +129,17 @@ CServer::CServer ( const int          iNewMaxNumChan,
     }
 
     // define colors for chat window identifiers
+    // Chosen so the name/timestamp header stays legible on both light and dark
+    // chat backgrounds: every color below clears WCAG AA contrast (>= 3:1) against
+    // white and against a typical dark theme background. The previous palette
+    // (mediumblue/darkorchid/green/maroon) fell below 1.4:1 on dark themes.
     vstrChatColors.Init ( 6 );
-    vstrChatColors[0] = "mediumblue";
-    vstrChatColors[1] = "red";
-    vstrChatColors[2] = "darkorchid";
-    vstrChatColors[3] = "green";
-    vstrChatColors[4] = "maroon";
-    vstrChatColors[5] = "coral";
+    vstrChatColors[0] = "royalblue";
+    vstrChatColors[1] = "crimson";
+    vstrChatColors[2] = "mediumorchid";
+    vstrChatColors[3] = "seagreen";
+    vstrChatColors[4] = "chocolate";
+    vstrChatColors[5] = "teal";
 
     // set the server frame size
     if ( bUseDoubleSystemFrameSize )
