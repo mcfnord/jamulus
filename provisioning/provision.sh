@@ -39,6 +39,17 @@ ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" '
   sudo apt-get install -y libqt5core5a libqt5network5 libqt5xml5 libjack-jackd2-0 libqt5widgets5 libqt5multimedia5 libqt5websockets5
   printf ":msg, contains, \"QObject: Cannot create children for a parent that is in a different thread\" stop\n" | sudo tee /etc/rsyslog.d/90-suppress-jamulus.conf > /dev/null
   sudo systemctl reload rsyslog 2>/dev/null || true
+  # Cap syslog size so it can never fill a small instance disk between the stock
+  # weekly rotations (default logrotate has no size check; a busy host can grow
+  # syslog into the multi-GB range in days, well before the next weekly rotation).
+  # Patch the existing /etc/logrotate.d/rsyslog stanza in place (rather than add a
+  # competing file for the same path, which logrotate flags as a duplicate entry).
+  # size 200M rides the existing daily cron.daily/logrotate run -- no new cron job needed.
+  sudo sed -i "s/^\tweekly$/\tweekly\n\tsize 200M/" /etc/logrotate.d/rsyslog
+  # /var/log is 775 root:syslog by design (lets rsyslog log as non-root) -- but logrotate
+  # refuses to rotate anything in a group-writable dir unless told who to act as.
+  # Without this, the size cap above silently never fires.
+  sudo sed -i "s/^{$/{\n\tsu root syslog/" /etc/logrotate.d/rsyslog
   sudo adduser --system --quiet --home /nonexistent --no-create-home jamulus 2>/dev/null || true
   sudo mkdir -p /etc/jamulus && sudo touch /etc/jamulus/welcome.html
 '

@@ -98,6 +98,8 @@ if [[ "$HAS_X86" == "1" ]]; then
 fi
 
 declare -A BUILT_HOSTS
+VERIFY_FULL=()   # host \t user \t services \t name \t dormant — restarted; verify binary + services + NRestarts
+VERIFY_BIN=()    # same fields — restart deferred; verify binary on disk only
 ARM64_U24_BINARY=""   # path to cached ubuntu24/aarch64 binary for cross-deploy
 if [[ -f /tmp/jamfan-arm64-u24 ]]; then
     CACHED_VER=$(strings /tmp/jamfan-arm64-u24 2>/dev/null | grep -o 'JAMFAN-[0-9a-f][0-9a-f]' | head -1 || echo "?")
@@ -168,6 +170,7 @@ WantedBy=multi-user.target''')
     if scp -i ~/.ssh/id_ed25519 -o ConnectTimeout=30 -o BatchMode=yes "$svc_tmp" "$user@$host:/tmp/jamulus-rock.service" 2>/dev/null; then
       ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=30 "$user@$host" "
         sudo mv /tmp/jamulus-rock.service /etc/systemd/system/jamulus-rock.service
+        sudo restorecon -v /etc/systemd/system/jamulus-rock.service 2>/dev/null || true
         sudo systemctl daemon-reload
         sudo systemctl enable jamulus-rock 2>/dev/null || true
         if ! sudo iptables -C INPUT -p tcp --dport ${rpcport} -j DROP 2>/dev/null; then
@@ -300,6 +303,7 @@ PYEOF
         echo "    restarting services on $host ..."
         ssh -i ~/.ssh/id_ed25519 "$user@$host" "sudo systemctl start $host_services"
         echo "    done."
+        VERIFY_FULL+=("$host"$'\t'"$user"$'\t'"$host_services"$'\t'"$name"$'\t'"$is_dormant")
         continue
       fi
     fi
@@ -321,9 +325,11 @@ PYCHECK
 )
     if [[ -n "$active" && "$FORCE" == "0" ]]; then
       echo "    binary updated, restart DEFERRED — $name has $active (use --force to override)"
+      VERIFY_BIN+=("$host"$'\t'"$user"$'\t'"$service"$'\t'"$name"$'\t'"$is_dormant")
     else
       ssh -i ~/.ssh/id_ed25519 "$user@$host" "sudo systemctl restart $service"
       echo "    done."
+      VERIFY_FULL+=("$host"$'\t'"$user"$'\t'"$service"$'\t'"$name"$'\t'"$is_dormant")
     fi
 
   else
@@ -356,10 +362,12 @@ PYCHECK
 )
     if [[ -n "$active" && "$FORCE" == "0" ]]; then
       echo "    binary updated, restart DEFERRED — $name has $active (use --force to override)"
+      VERIFY_BIN+=("$host"$'\t'"$user"$'\t'"$service"$'\t'"$name"$'\t'"$is_dormant")
     else
       ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=30 "$user@$host" "sudo systemctl restart $service" 2>/dev/null \
         || { [[ "$is_dormant" == "1" ]] && echo "    SKIP_DORMANT $name — restart failed (stopped mid-flight)"; continue; }
       echo "    done."
+      VERIFY_FULL+=("$host"$'\t'"$user"$'\t'"$service"$'\t'"$name"$'\t'"$is_dormant")
     fi
   fi
 done
@@ -401,3 +409,77 @@ echo "24.199.107.192"
 } | ssh -i ~/.ssh/id_ed25519 root@jamulus.live \
     'cat > /root/JamFan22/JamFan22/data/fleet-server-ips.txt'
 echo "Fleet IPs synced to jamfan22."
+
+# ---------------------------------------------------------------------------
+# Post-deploy verification (the quality bar from CLAUDE.md, automated):
+#   binary arch == uname -m, ldd clean, rev on disk == this run's rev,
+#   services active, NRestarts stable over a 60s watch.
+# Deferred-restart hosts get binary-on-disk checks only (old process still up).
+
+verify_host() {  # host user services -> "ARCH=<ok|MISMATCH> NF=<n> VER=<s> INACT=<list> NR=<svc:n ...>"
+  ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=15 -o BatchMode=yes "$1@$2" bash -s "$3" <<'VEOF' 2>/dev/null
+services="$1"
+case "$(uname -m)" in x86_64) want="x86-64";; aarch64) want="aarch64";; *) want="$(uname -m)";; esac
+case "$(file -b /usr/bin/jamulus-jamfan 2>/dev/null)" in *"$want"*) arch=ok;; *) arch=MISMATCH;; esac
+nf=$(ldd /usr/bin/jamulus-jamfan 2>/dev/null | grep -c "not found")
+ver=$(strings /usr/bin/jamulus-jamfan 2>/dev/null | grep -o 'JAMFAN-[0-9a-f][0-9a-f]' | head -1)
+inact=""; nr=""
+for s in $services; do
+  a=$(systemctl is-active "$s" 2>/dev/null)
+  [ "$a" = "active" ] || inact="$inact$s=$a "
+  nr="$nr$s:$(systemctl show -p NRestarts --value "$s" 2>/dev/null) "
+done
+echo "ARCH=$arch NF=$nf VER=$ver INACT=${inact% } NR=${nr% }"
+VEOF
+}
+
+field() { sed -n "s/.*$1=\(.*\)/\1/p" <<< "$2" | sed "s/ [A-Z]*=.*//"; }
+
+VFAIL=0
+if (( ${#VERIFY_FULL[@]} + ${#VERIFY_BIN[@]} > 0 )); then
+  echo "==> Post-deploy verification (expect JAMFAN-${HEX_REV})"
+  declare -A NR_PASS1
+  for entry in "${VERIFY_FULL[@]}" "${VERIFY_BIN[@]}"; do
+    IFS=$'\t' read -r host user services name dormant <<< "$entry"
+    out=$(verify_host "$user" "$host" "$services" || true)
+    if [[ -z "$out" ]]; then
+      if [[ "$dormant" == "1" ]]; then echo "    VERIFY SKIP $name — unreachable (dormant, stopped mid-flight)"
+      else echo "    VERIFY FAIL $name — unreachable"; VFAIL=1; fi
+      continue
+    fi
+    reasons=""
+    [[ "$(field ARCH "$out")" == "ok" ]] || reasons+="arch mismatch ($(field ARCH "$out")); "
+    [[ "$(field NF "$out")" == "0" ]] || reasons+="$(field NF "$out") missing shared libs; "
+    [[ "$(field VER "$out")" == "JAMFAN-${HEX_REV}" ]] || reasons+="binary is $(field VER "$out"), expected JAMFAN-${HEX_REV}; "
+    NR_PASS1["$name"]="$(field NR "$out")"
+    if [[ -n "$reasons" ]]; then echo "    VERIFY FAIL $name — ${reasons%; }"; VFAIL=1
+    else echo "    verify pass 1 ok: $name"; fi
+  done
+
+  if (( ${#VERIFY_FULL[@]} > 0 )); then
+    echo "    watching restart counters for 60s ..."
+    sleep 60
+    for entry in "${VERIFY_FULL[@]}"; do
+      IFS=$'\t' read -r host user services name dormant <<< "$entry"
+      out=$(verify_host "$user" "$host" "$services" || true)
+      if [[ -z "$out" ]]; then
+        [[ "$dormant" == "1" ]] || { echo "    VERIFY FAIL $name — unreachable on pass 2"; VFAIL=1; }
+        continue
+      fi
+      reasons=""
+      inact="$(field INACT "$out")"
+      [[ -z "$inact" ]] || reasons+="not active: $inact; "
+      [[ "$(field NR "$out")" == "${NR_PASS1[$name]:-}" ]] || reasons+="restart counter moved (${NR_PASS1[$name]:-?} -> $(field NR "$out")); "
+      if [[ -n "$reasons" ]]; then echo "    VERIFY FAIL $name — ${reasons%; }"; VFAIL=1
+      else echo "    VERIFY OK $name"; fi
+    done
+  fi
+  for entry in "${VERIFY_BIN[@]}"; do
+    IFS=$'\t' read -r _ _ _ name _ <<< "$entry"
+    echo "    VERIFY OK $name (binary only — restart deferred, re-verify after restart)"
+  done
+fi
+if (( VFAIL )); then
+  echo "==> VERIFICATION FAILED — fix before considering this deploy done."
+  exit 1
+fi
