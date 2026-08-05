@@ -665,6 +665,48 @@ void CServer::OnTimerCapacityLog()
 #else
     qInfo() << QString ( "[CAPACITY] clients=%1/%2" ).arg ( iConnected ).arg ( iMaxNumChannels );
 #endif
+
+    // ---- #2979 arm 6 FLEETOCC occupancy census (print only, no behaviour change) ----
+    // Runs on this 60 s QTimer, never on the mixing path.  One line per connected
+    // channel, cumulative since connect, so a dropped line cannot corrupt the series.
+    // Deliberately carries no name, no IP and no GUID -- an anonymous channel index.
+    for ( int iOccCh = 0; iOccCh < iMaxNumChannels; iOccCh++ )
+    {
+        if ( !vecChannels[iOccCh].IsConnected() )
+        {
+            continue;
+        }
+
+        uint32_t iOccSamples = 0;
+        uint32_t iOccSkipped = 0;
+        uint32_t aOccHist[MAX_NET_BUF_SIZE_NUM_BL + 1];
+
+        vecChannels[iOccCh].GetOccCensus ( iOccSamples, iOccSkipped, aOccHist );
+
+        if ( ( iOccSamples == 0 ) && ( iOccSkipped == 0 ) )
+        {
+            continue;
+        }
+
+        QString strOccHist;
+
+        for ( int iOccIdx = 0; iOccIdx <= MAX_NET_BUF_SIZE_NUM_BL; iOccIdx++ )
+        {
+            if ( iOccIdx > 0 )
+            {
+                strOccHist += ",";
+            }
+            strOccHist += QString::number ( aOccHist[iOccIdx] );
+        }
+
+        qInfo() << QString ( "[FLEETOCC] ch=%1 size=%2 n=%3 skip=%4 hist=%5" )
+                       .arg ( iOccCh )
+                       .arg ( vecChannels[iOccCh].GetSockBufNumFrames() )
+                       .arg ( iOccSamples )
+                       .arg ( iOccSkipped )
+                       .arg ( strOccHist );
+    }
+    // ---- end instrumentation ----
 }
 
 void CServer::OnTimer()
