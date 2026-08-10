@@ -214,6 +214,14 @@ protected:
         iCeltNumCodedBytes    = CELT_MINIMUM_NUM_BYTES;
         iNumAudioChannels     = 1; // mono
         bUseSequenceNumber    = false;
+
+        // discard the concealment measurement too: this channel object is reused
+        // for the next client that lands on this slot, and a stale percentage
+        // inherited from the previous occupant would be applied to a connection
+        // it was never measured on (see PLAN-ADAPTIVE-PLC.md Step 1c)
+        iConcealWindowCount = 0;
+        iConcealFailCount   = 0;
+        iMeasuredConcealPct.store ( -1, std::memory_order_relaxed );
     }
 
     // connection parameters

@@ -1569,7 +1569,7 @@ void CServer::OnConcealTelemetryTimer()
             // -1 = no complete window yet; nothing to report
             if ( ( iConcealPct != -1 ) && ( iConcealPct != aiLastLoggedConcealPct[iChanID] ) )
             {
-                qDebug() << qUtf8Printable ( QString ( "adaptive-plc: channel %1 concealment now %2%% (window %3 blocks)" )
+                qDebug() << qUtf8Printable ( QString ( "adaptive-plc: channel %1 concealment now %2 percent (window %3 blocks)" )
                                                   .arg ( iChanID )
                                                   .arg ( iConcealPct )
                                                   .arg ( vecChannels[iChanID].GetConcealWindowLen() ) );
