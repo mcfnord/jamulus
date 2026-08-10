@@ -50,6 +50,7 @@
 #include <QDateTime>
 #include <QHostAddress>
 #include <QFileInfo>
+#include <QTimer>
 #include <algorithm>
 #include <atomic>
 #ifdef USE_OPUS_SHARED_LIB
@@ -144,7 +145,8 @@ public:
                           CVector<QString>&          vecsName,
                           CVector<int>&              veciJitBufNumFrames,
                           CVector<int>&              veciNetwFrameSizeFact,
-                          CVector<CChannelCoreInfo>& vecChanInfo );
+                          CVector<CChannelCoreInfo>& vecChanInfo,
+                          CVector<int>&              veciConcealPct );
 
     void CreateCLServerListReqVerAndOSMes ( const CHostAddress& InetAddr ) { ConnLessProtocol.CreateCLReqVersionAndOSMes ( InetAddr ); }
 
@@ -304,6 +306,12 @@ protected:
 
     CHighPrecisionTimer HighPrecisionTimer;
 
+    // concealment-rate telemetry (see PLAN-ADAPTIVE-PLC.md Step 1d): a plain
+    // main-thread poller, kept off the audio thread entirely -- GetData()
+    // only ever writes an atomic, this timer does the (occasional) logging
+    QTimer ConcealTelemetryTimer;
+    int    aiLastLoggedConcealPct[MAX_NUM_CHANNELS];
+
     // server list
     CServerListManager ServerListManager;
 
@@ -349,6 +357,8 @@ signals:
 
 public slots:
     void OnTimer();
+
+    void OnConcealTelemetryTimer();
 
     void OnNewConnection ( int iChID, int iTotChans, CHostAddress RecHostAddr );
 

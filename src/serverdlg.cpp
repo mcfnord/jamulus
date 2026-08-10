@@ -711,10 +711,11 @@ void CServerDlg::OnTimer()
     CVector<int>              veciJitBufNumFrames;
     CVector<int>              veciNetwFrameSizeFact;
     CVector<CChannelCoreInfo> vecChanInfo;
+    CVector<int>              veciConcealPct; // unused here; see PLAN-ADAPTIVE-PLC.md
 
     ListViewMutex.lock();
     {
-        pServer->GetConCliParam ( vecHostAddresses, vecsName, veciJitBufNumFrames, veciNetwFrameSizeFact, vecChanInfo );
+        pServer->GetConCliParam ( vecHostAddresses, vecsName, veciJitBufNumFrames, veciNetwFrameSizeFact, vecChanInfo, veciConcealPct );
 
         // we assume that all vectors have the same length
         const int iNumChannels = vecHostAddresses.Size();

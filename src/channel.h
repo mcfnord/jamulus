@@ -193,6 +193,13 @@ public:
 
     double UpdateAndGetLevelForMeterdB ( const CVector<short>& vecsAudio, const int iInSize, const bool bIsStereoIn );
 
+    // concealment-rate measurement (see PLAN-ADAPTIVE-PLC.md): -1 = no complete window yet
+    int GetMeasuredConcealPct() const { return iMeasuredConcealPct.load ( std::memory_order_relaxed ); }
+
+    // window length in blocks, for telemetry only; changes only on a frame-size change
+    // (rare, main-thread-driven) so an unsynchronized read here is harmless for a log line
+    int GetConcealWindowLen() const { return iConcealWindowLen; }
+
 protected:
     bool ProtocolIsEnabled();
 
@@ -248,6 +255,12 @@ protected:
 
     EAudComprType eAudioCompressionType;
     int           iNumAudioChannels;
+
+    // concealment-rate measurement (see PLAN-ADAPTIVE-PLC.md)
+    int              iConcealWindowLen   = CONCEAL_WINDOW_BLOCKS; // per frame size, set in SetAudioStreamProperties
+    int              iConcealWindowCount = 0;                     // blocks seen in the current window
+    int              iConcealFailCount   = 0;                     // of those, blocks the buffer could not supply
+    std::atomic<int> iMeasuredConcealPct { -1 };                  // -1 = no complete window yet
 
     QMutex Mutex;
     QMutex MutexSocketBuf;

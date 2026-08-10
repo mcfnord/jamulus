@@ -226,8 +226,9 @@ CClientRpc::CClientRpc ( CClient* pClient, CClientSettings* pSettings, CRpcServe
     /// @brief Returns the client information.
     /// @param {object} params - No parameters (empty object).
     /// @result {boolean} result.connected - Whether the client is connected to the server.
+    /// @result {number} result.concealPct - Measured concealment rate (%) on this client's downlink over the last ~2 s window; -1 if no complete window yet. See PLAN-ADAPTIVE-PLC.md.
     pRpcServer->HandleMethod ( "jamulusclient/getClientInfo", [=] ( const QJsonObject& params, QJsonObject& response ) {
-        QJsonObject result{ { "connected", pClient->IsConnected() } };
+        QJsonObject result{ { "connected", pClient->IsConnected() }, { "concealPct", pClient->GetMeasuredConcealPct() } };
         response["result"] = result;
         Q_UNUSED ( params );
     } );

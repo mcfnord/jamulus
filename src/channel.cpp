@@ -228,6 +228,15 @@ void CChannel::SetAudioStreamProperties ( const EAudComprType eNewAudComprType,
             // init socket buffer
             SockBuf.SetUseDoubleSystemFrameSize ( eAudioCompressionType == CT_OPUS ); // NOTE must be set BEFORE the init()
             SockBuf.Init ( iCeltNumCodedBytes, iCurSockBufNumFrames, bUseSequenceNumber );
+
+            // (re-)size the concealment-rate window for the new frame size and reset it:
+            // a format change must never publish a ratio mixed across two window sizes
+            // (see PLAN-ADAPTIVE-PLC.md Step 1c)
+            iConcealWindowLen = ( eAudioCompressionType == CT_OPUS ) ? CONCEAL_WINDOW_BLOCKS_DOUBLE_FRAME_SIZE : CONCEAL_WINDOW_BLOCKS;
+
+            iConcealWindowCount = 0;
+            iConcealFailCount   = 0;
+            iMeasuredConcealPct.store ( -1, std::memory_order_relaxed );
         }
         MutexSocketBuf.unlock();
 
@@ -477,6 +486,15 @@ void CChannel::OnNetTranspPropsReceived ( CNetworkTransportProps NetworkTranspor
                 // minimum network frame size)
                 SockBuf.SetUseDoubleSystemFrameSize ( eAudioCompressionType == CT_OPUS ); // NOTE must be set BEFORE the init()
                 SockBuf.Init ( iCeltNumCodedBytes, iCurSockBufNumFrames, bUseSequenceNumber );
+
+                // (re-)size the concealment-rate window for the new frame size and reset it:
+                // a format change must never publish a ratio mixed across two window sizes
+                // (see PLAN-ADAPTIVE-PLC.md Step 1c)
+                iConcealWindowLen = ( eAudioCompressionType == CT_OPUS ) ? CONCEAL_WINDOW_BLOCKS_DOUBLE_FRAME_SIZE : CONCEAL_WINDOW_BLOCKS;
+
+                iConcealWindowCount = 0;
+                iConcealFailCount   = 0;
+                iMeasuredConcealPct.store ( -1, std::memory_order_relaxed );
             }
             MutexSocketBuf.unlock();
 
@@ -667,6 +685,30 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
         {
             // channel is disconnected
             eGetStatus = GS_CHAN_NOT_CONNECTED;
+        }
+
+        // concealment-rate measurement (see PLAN-ADAPTIVE-PLC.md): count only
+        // while connected, so a disconnecting/disconnected channel cannot
+        // pollute the window with counts that do not reflect real traffic
+        if ( ( eGetStatus == GS_BUFFER_OK ) || ( eGetStatus == GS_BUFFER_UNDERRUN ) )
+        {
+            iConcealWindowCount++;
+
+            if ( eGetStatus == GS_BUFFER_UNDERRUN )
+            {
+                iConcealFailCount++;
+            }
+
+            if ( iConcealWindowCount >= iConcealWindowLen )
+            {
+                // round, don't truncate: truncation reads up to ~1% low, i.e. toward
+                // LESS protection, exactly at the Opus gate boundaries
+                iMeasuredConcealPct.store ( ( iConcealFailCount * 100 + iConcealWindowLen / 2 ) / iConcealWindowLen,
+                                            std::memory_order_relaxed );
+
+                iConcealWindowCount = 0;
+                iConcealFailCount   = 0;
+            }
         }
     }
     MutexSocketBuf.unlock();

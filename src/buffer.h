@@ -75,6 +75,12 @@
 // blocks we have 15 s / 1.33 ms * 2 = approx. 22500
 #define MAX_STATISTIC_COUNT 22500
 
+// concealment-rate measurement window (see PLAN-ADAPTIVE-PLC.md): sized for
+// ~2 s so an adaptive encoder can react within seconds, unlike the 15 s
+// window above which is sized for jitter-buffer sizing decisions
+#define CONCEAL_WINDOW_BLOCKS                   1500 // 64-sample frames: 1500 * 1.333 ms ~= 2 s
+#define CONCEAL_WINDOW_BLOCKS_DOUBLE_FRAME_SIZE 750   // 128-sample frames: 750 * 2.667 ms ~= 2 s
+
 // Note that the following definitions of the weigh constants assume a block
 // size of 128 samples at a sampling rate of 48 kHz.
 #define IIR_WEIGTH_UP_NORMAL_DOUBLE_FRAME_SIZE   0.999995

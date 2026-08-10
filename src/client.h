@@ -219,6 +219,9 @@ public:
 
     int GetUploadRateKbps() { return Channel.GetUploadRateKbps(); }
 
+    // concealment rate measured on this client's downlink (see PLAN-ADAPTIVE-PLC.md); -1 = no complete window yet
+    int GetMeasuredConcealPct() { return Channel.GetMeasuredConcealPct(); }
+
     // sound card device selection
     QStringList GetSndCrdDevNames() { return Sound.GetDevNames(); }
 

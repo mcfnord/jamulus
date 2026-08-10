@@ -170,6 +170,7 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
     /// @result {string} result.clients[*].city - The city name provided by the user for this channel.
     /// @result {number} result.clients[*].countryName - The text name of the country specified by the user for this channel (see QLocale::Country).
     /// @result {number} result.clients[*].skillLevelCode - The skill level id provided by the user for this channel.
+    /// @result {number} result.clients[*].concealPct - Measured concealment rate (%) on this client's uplink over the last ~2 s window; -1 if no complete window yet. See PLAN-ADAPTIVE-PLC.md.
     pRpcServer->HandleMethod ( "jamulusserver/getClients", [=] ( const QJsonObject& params, QJsonObject& response ) {
         QJsonArray                clients;
         CVector<CHostAddress>     vecHostAddresses;
@@ -177,10 +178,11 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
         CVector<int>              veciJitBufNumFrames;
         CVector<int>              veciNetwFrameSizeFact;
         CVector<CChannelCoreInfo> vecChanInfo;
+        CVector<int>              veciConcealPct;
 
         int connections = 0;
 
-        pServer->GetConCliParam ( vecHostAddresses, vecsName, veciJitBufNumFrames, veciNetwFrameSizeFact, vecChanInfo );
+        pServer->GetConCliParam ( vecHostAddresses, vecsName, veciJitBufNumFrames, veciNetwFrameSizeFact, vecChanInfo, veciConcealPct );
 
         // we assume that all vectors have the same length
         const int iNumChannels = vecHostAddresses.Size();
@@ -203,6 +205,7 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
                 { "city", vecChanInfo[i].strCity },
                 { "countryName", QLocale::countryToString ( vecChanInfo[i].eCountry ) },
                 { "skillLevelCode", vecChanInfo[i].eSkillLevel },
+                { "concealPct", veciConcealPct[i] },
             };
             clients.append ( client );
 
