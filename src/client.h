@@ -436,8 +436,22 @@ protected:
     QElapsedTimer         PlcAbUptime;
     std::atomic<int>      iPlcAbTarget { 35 };
     int                   iPlcAbApplied = 35; // audio-thread-only
-    int                   iPlcAbLo      = 0;
-    int                   iPlcAbHi      = 35;
+    // Arms cycled in order, one per JAM_AB_SECS segment. Index 0 is the arm a
+    // session starts in, and it is 35 deliberately: that is the value shipped
+    // code uses, so a session opens in stock behaviour before deviating.
+    // Override with JAM_AB_ARMS="35,0,70"; JAM_AB_LO / JAM_AB_HI still work and
+    // build a two-arm cycle for anything that already scripts them.
+    QVector<int>          vecPlcAbArms { 35, 0, 70 };
+
+    QString strPlcAbArms() const
+    {
+        QStringList lstArms;
+        for ( const int iArm : vecPlcAbArms )
+        {
+            lstArms << QString::number ( iArm );
+        }
+        return lstArms.join ( "," );
+    }
     int                   iPlcAbSegSecs = 120;
     int                   iPlcAbTlmSecs = 10;
     bool                  bPlcAbEnabled = true;

@@ -66,7 +66,7 @@ setup() {
             qtmultimedia=("--modules")
         fi
         qtmultimedia+=("qtmultimedia")
-        python3 -m aqt install-qt --outputdir "${QT_DIR}" mac ios "${QT_VERSION}" --archives qtbase qttools qttranslations "${qtmultimedia[@]}"
+        python3 -m aqt install-qt --outputdir "${QT_DIR}" mac ios "${QT_VERSION}" --archives qtbase qttools qttranslations qtwebsockets "${qtmultimedia[@]}"
         if [[ ! "${QT_VERSION}" =~ 5\.[0-9]+\.[0-9]+  ]]; then
             # Starting with Qt6, ios' qtbase install does no longer include a real qmake binary.
             # Instead, it is a script which invokes the mac desktop qmake.

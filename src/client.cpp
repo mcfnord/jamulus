@@ -206,13 +206,29 @@ CClient::CClient ( const quint16  iPortNumber,
         {
             bPlcAbEnabled = false;
         }
-        if ( ( pEnv = getenv ( "JAM_AB_LO" ) ) )
+        if ( ( pEnv = getenv ( "JAM_AB_ARMS" ) ) )
         {
-            iPlcAbLo = atoi ( pEnv );
+            QVector<int> vecParsed;
+            for ( const QString& strArm : QString ( pEnv ).split ( ',', Qt::SkipEmptyParts ) )
+            {
+                bool      bOk    = false;
+                const int iValue = strArm.trimmed().toInt ( &bOk );
+                if ( bOk && ( iValue >= 0 ) && ( iValue <= 100 ) )
+                {
+                    vecParsed.append ( iValue );
+                }
+            }
+            if ( !vecParsed.isEmpty() )
+            {
+                vecPlcAbArms = vecParsed;
+            }
         }
-        if ( ( pEnv = getenv ( "JAM_AB_HI" ) ) )
+        else if ( getenv ( "JAM_AB_LO" ) || getenv ( "JAM_AB_HI" ) )
         {
-            iPlcAbHi = atoi ( pEnv );
+            // backwards compatible two-arm cycle, HI first to match the old start arm
+            const char* pLo = getenv ( "JAM_AB_LO" );
+            const char* pHi = getenv ( "JAM_AB_HI" );
+            vecPlcAbArms    = QVector<int> { pHi ? atoi ( pHi ) : 35, pLo ? atoi ( pLo ) : 0 };
         }
         if ( ( pEnv = getenv ( "JAM_AB_SECS" ) ) && ( atoi ( pEnv ) > 0 ) )
         {
@@ -226,10 +242,9 @@ CClient::CClient ( const quint16  iPortNumber,
         QObject::connect ( &TimerPlcAb, &QTimer::timeout, this, &CClient::OnTimerPlcAb );
         QObject::connect ( &TimerPlcAbTelemetry, &QTimer::timeout, this, &CClient::OnTimerPlcAbTelemetry );
 
-        qDebug() << qUtf8Printable ( QString ( "[PLCAB] config enabled=%1 lo=%2 hi=%3 seg_secs=%4 tlm_secs=%5" )
+        qDebug() << qUtf8Printable ( QString ( "[PLCAB] config enabled=%1 arms=%2 seg_secs=%3 tlm_secs=%4" )
                                          .arg ( bPlcAbEnabled )
-                                         .arg ( iPlcAbLo )
-                                         .arg ( iPlcAbHi )
+                                         .arg ( strPlcAbArms() )
                                          .arg ( iPlcAbSegSecs )
                                          .arg ( iPlcAbTlmSecs ) );
     }
@@ -568,7 +583,7 @@ void CClient::OnTimerPlcAb()
 {
     iPlcAbSegIdx++;
 
-    const int iNewTarget = ( iPlcAbTarget.load ( std::memory_order_relaxed ) == iPlcAbHi ) ? iPlcAbLo : iPlcAbHi;
+    const int iNewTarget = vecPlcAbArms[iPlcAbSegIdx % vecPlcAbArms.size()];
     iPlcAbTarget.store ( iNewTarget, std::memory_order_relaxed );
 
     qDebug() << qUtf8Printable ( QString ( "[PLCAB] segment=%1 plc=%2" ).arg ( iPlcAbSegIdx ).arg ( iNewTarget ) );
@@ -1125,7 +1140,7 @@ void CClient::Start()
     {
         iPlcAbSegIdx = 0;
         iPlcAbTlmSeq = 0;
-        iPlcAbTarget.store ( iPlcAbHi, std::memory_order_relaxed );
+        iPlcAbTarget.store ( vecPlcAbArms[0], std::memory_order_relaxed );
         iPlcAbClipCum.store ( 0, std::memory_order_relaxed );
         Channel.ResetConcealCumCounters();
         PlcAbUptime.start();

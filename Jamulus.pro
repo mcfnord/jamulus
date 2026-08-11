@@ -1,5 +1,8 @@
-isEmpty(JAMFAN_REV): JAMFAN_REV = 00
-VERSION = 3.12.1-JAMFAN-$$JAMFAN_REV
+# Keep this a literal assignment: .github/autobuild/get_build_vars.py reads VERSION
+# by regex out of this file and never runs qmake, so a $$-expansion here reaches CI
+# unexpanded and the ChangeLog lookup then finds no matching entry.
+VERSION = 3.12.1-BETTER-WIFI-TEST-00
+!isEmpty(JAMFAN_REV): VERSION = 3.12.1-BETTER-WIFI-TEST-$$JAMFAN_REV
 
 # Using lrelease and embed_translations only works for Qt 5.12 or later.
 # See https://github.com/jamulussoftware/jamulus/pull/3288 for these changes.
