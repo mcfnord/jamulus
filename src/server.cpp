@@ -129,13 +129,17 @@ CServer::CServer ( const int          iNewMaxNumChan,
     }
 
     // define colors for chat window identifiers
+    // Chosen so the name/timestamp header stays legible on both light and dark
+    // chat backgrounds: every color below clears WCAG AA contrast (>= 3:1) against
+    // white and against a typical dark theme background. The previous palette
+    // (mediumblue/darkorchid/green/maroon) fell below 1.4:1 on dark themes.
     vstrChatColors.Init ( 6 );
-    vstrChatColors[0] = "mediumblue";
-    vstrChatColors[1] = "red";
-    vstrChatColors[2] = "darkorchid";
-    vstrChatColors[3] = "green";
-    vstrChatColors[4] = "maroon";
-    vstrChatColors[5] = "coral";
+    vstrChatColors[0] = "royalblue";
+    vstrChatColors[1] = "crimson";
+    vstrChatColors[2] = "mediumorchid";
+    vstrChatColors[3] = "seagreen";
+    vstrChatColors[4] = "chocolate";
+    vstrChatColors[5] = "teal";
 
     // set the server frame size
     if ( bUseDoubleSystemFrameSize )
@@ -230,6 +234,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
     {
         vecChannels[i].SetEnable ( true );
         vecChannelOrder[i] = i;
+        aiLastLoggedConcealPct[i] = -1; // concealment-rate telemetry: no window logged yet
     }
 
     int iAvailableCores = QThread::idealThreadCount();
@@ -256,6 +261,10 @@ CServer::CServer ( const int          iNewMaxNumChan,
     // Connections -------------------------------------------------------------
     // connect timer timeout signal
     QObject::connect ( &HighPrecisionTimer, &CHighPrecisionTimer::timeout, this, &CServer::OnTimer );
+
+    // concealment-rate telemetry: plain main-thread poll, ~1 s (PLAN-ADAPTIVE-PLC.md Step 1d)
+    ConcealTelemetryTimer.setInterval ( 1000 );
+    QObject::connect ( &ConcealTelemetryTimer, &QTimer::timeout, this, &CServer::OnConcealTelemetryTimer );
 
     QObject::connect ( &ConnLessProtocol, &CProtocol::CLMessReadyForSending, this, &CServer::OnSendCLProtMessage );
 
@@ -365,6 +374,8 @@ inline void CServer::connectChannelSignalsToServerSlots()
 
     void ( CServer::*pOnChatTextReceivedCh ) ( QString ) = &CServerSlots<slotId>::OnChatTextReceivedCh;
 
+    void ( CServer::*pOnPlcAbTelemetryReceivedCh ) ( QString ) = &CServerSlots<slotId>::OnPlcAbTelemetryReceivedCh; // TEST-ONLY
+
     void ( CServer::*pOnMuteStateHasChangedCh ) ( int, bool ) = &CServerSlots<slotId>::OnMuteStateHasChangedCh;
 
     void ( CServer::*pOnServerAutoSockBufSizeChangeCh ) ( int ) = &CServerSlots<slotId>::OnServerAutoSockBufSizeChangeCh;
@@ -392,6 +403,9 @@ inline void CServer::connectChannelSignalsToServerSlots()
 
     // chat text received
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::ChatTextReceived, this, pOnChatTextReceivedCh );
+
+    // TEST-ONLY (plc-ab-tester): A/B field-trial telemetry received
+    QObject::connect ( &vecChannels[iCurChanID], &CChannel::PlcAbTelemetryReceived, this, pOnPlcAbTelemetryReceivedCh );
 
     // other mute state has changed
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::MuteStateHasChanged, this, pOnMuteStateHasChangedCh );
@@ -613,6 +627,9 @@ void CServer::Start()
         // start timer
         HighPrecisionTimer.Start();
 
+        // start concealment-rate telemetry poll
+        ConcealTelemetryTimer.start();
+
         // emit start signal
         emit Started();
     }
@@ -628,6 +645,9 @@ void CServer::Stop()
     {
         // stop timer
         HighPrecisionTimer.Stop();
+
+        // stop concealment-rate telemetry poll
+        ConcealTelemetryTimer.stop();
 
         // logging (add "server stopped" logging entry)
         Logging.AddServerStopped();
@@ -1588,6 +1608,44 @@ void CServer::FreeChannel ( const int iCurChanID )
     }
 
     qWarning() << "FreeChannel() called with invalid channel ID";
+}
+
+void CServer::OnConcealTelemetryTimer()
+{
+    // Bounded: at most iMaxNumChannels relaxed atomic loads per second; logs only
+    // on change, and the value changes at most once per ~2 s window per channel.
+    for ( int iChanID = 0; iChanID < iMaxNumChannels; iChanID++ )
+    {
+        if ( vecChannels[iChanID].IsConnected() )
+        {
+            const int iConcealPct = vecChannels[iChanID].GetMeasuredConcealPct();
+
+            if ( ( iConcealPct != -1 ) && ( iConcealPct != aiLastLoggedConcealPct[iChanID] ) )
+            {
+                qDebug() << qUtf8Printable ( QString ( "adaptive-plc: channel %1 concealment now %2 percent (window %3 blocks)" )
+                                                 .arg ( iChanID )
+                                                 .arg ( iConcealPct )
+                                                 .arg ( vecChannels[iChanID].GetConcealWindowLen() ) );
+
+                aiLastLoggedConcealPct[iChanID] = iConcealPct;
+            }
+        }
+        else if ( aiLastLoggedConcealPct[iChanID] != -1 )
+        {
+            aiLastLoggedConcealPct[iChanID] = -1;
+        }
+    }
+}
+
+// TEST-ONLY (plc-ab-tester): one journal line per tester report, paired with this
+// end's own uplink concealment for the same channel
+void CServer::LogPlcAbTelemetry ( const int iCurChanID, const QString& strFields )
+{
+    qDebug() << qUtf8Printable ( QString ( "[PLCAB] ch=%1 name=\"%2\" upconceal=%3 %4" )
+                                     .arg ( iCurChanID )
+                                     .arg ( vecChannels[iCurChanID].GetName() )
+                                     .arg ( vecChannels[iCurChanID].GetMeasuredConcealPct() )
+                                     .arg ( strFields ) );
 }
 
 void CServer::DumpChannels ( const QString& title )

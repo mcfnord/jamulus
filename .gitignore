@@ -57,3 +57,22 @@ jamulus_plugin_import.cpp
 .github_release_changelog.md
 /debian/
 .github/instructions/awesome-copilot-instructions
+
+# --- jamfan operational material: lives in the PRIVATE mcfnord/jamfan-central-command
+# repo (backed up daily by /root/backup/sync.sh), deliberately untracked here so it is
+# never published to the public fork. Untracked 2026-08-11; earlier revisions remain in
+# this branch's history and in forks.
+/CLAUDE.md
+/TODO.md
+/deploy.sh
+/deploy-jazz.sh
+/dormant-monitor.py
+/fleet-stress.sh
+/fleet.json
+/investigate_guid_ip.py
+/jamfan-rev
+/monitor-blind-window.py
+/poc-silent-bots.py
+/rpc.sh
+/sync-fleet-ips.sh
+/provisioning/

@@ -56,18 +56,6 @@
 #include "connectdlg.h"
 #include "analyzerconsole.h"
 #include "ui_clientdlgbase.h"
-#include "jamuluslookups.h"
-#include <QSet>
-#include <QCryptographicHash>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
-#include <QStandardPaths>
-#include <QFile>
-#include <QRegularExpression>
 #if defined( Q_OS_MACOS )
 #    include "mac/badgelabel.h"
 #endif
@@ -117,16 +105,8 @@ protected:
     CClient*         pClient;
     CClientSettings* pSettings;
 
-    int                    iClients;
-    QSet<QString>          m_knownGuids;
-    bool                   m_hibotReady   = false;
-    bool                   m_hibotSending = false;
-    bool                   m_hibotSnapped = false;
-    int                    m_hibotOwnChanId = -1;
-    QString                m_hibotServerAddr;
-    QString                m_hibotSecret;
-    QNetworkAccessManager* m_hibotNam     = nullptr;
-    bool                   bConnected;
+    int            iClients;
+    bool           bConnected;
     bool           bConnectDlgWasShown;
     bool           bDetectFeedback;
     bool           bEnableIPv6;
@@ -246,7 +226,7 @@ public slots:
         ConnectDlg.SetConnClientsList ( InetAddr, vecChanInfo );
     }
 
-    void OnClientIDReceived ( int iChanID ) { m_hibotOwnChanId = iChanID; MainMixerBoard->SetMyChannelID ( iChanID ); }
+    void OnClientIDReceived ( int iChanID ) { MainMixerBoard->SetMyChannelID ( iChanID ); }
 
     void OnMuteStateHasChangedReceived ( int iChanID, bool bIsMuted ) { MainMixerBoard->SetRemoteFaderIsMute ( iChanID, bIsMuted ); }
 

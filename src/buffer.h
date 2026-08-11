@@ -48,6 +48,8 @@
 // each regular buffer access lead to a count for put and get, assuming 2.66 ms
 // blocks we have 15 s / 2.66 ms * 2 = approx. 11000
 #define MAX_STATISTIC_COUNT_DOUBLE_FRAME_SIZE 11000
+#define CONCEAL_WINDOW_BLOCKS                   1500 // 64-sample frames: 1500 * 1.333 ms ~= 2 s (PLAN-ADAPTIVE-PLC.md)
+#define CONCEAL_WINDOW_BLOCKS_DOUBLE_FRAME_SIZE 750  // 128-sample frames: 750 * 2.667 ms ~= 2 s
 
 // each regular buffer access lead to a count for put and get, assuming 1.33 ms
 // blocks we have 15 s / 1.33 ms * 2 = approx. 22500

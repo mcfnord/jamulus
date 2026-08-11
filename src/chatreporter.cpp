@@ -287,6 +287,12 @@ void ChatReporter::connectFleetSocket()
     QUrl url(QStringLiteral("wss://jamulus.live/fleet-rpc-channel"));
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("port"), QString::number(m_port));
+#ifndef SERVER_BUNDLE
+    // Client builds register the build string so a field trial can see which
+    // testers are live and on which binary. Server builds are identified by
+    // their real port and add nothing.
+    q.addQueryItem(QStringLiteral("build"), QStringLiteral(APP_VERSION));
+#endif
     url.setQuery(q);
 
     m_fleetSocket->open(url);

@@ -275,14 +275,6 @@ CClientDlg::CClientDlg ( CClient*         pNCliP,
     TimerCheckAudioDeviceOk.setSingleShot ( true ); // only check once after connection
     TimerDetectFeedback.setSingleShot ( true );
 
-    // HiBot: load operator secret (file gates LLM calls at jamulus.live)
-    {
-        const QString secretPath = QCoreApplication::applicationDirPath() + "/hibot-secret";
-        QFile         f ( secretPath );
-        if ( f.open ( QIODevice::ReadOnly ) )
-            m_hibotSecret = QString::fromUtf8 ( f.readAll() ).trimmed();
-    }
-
     // Connect on startup ------------------------------------------------------
     if ( !strConnOnStartupAddress.isEmpty() )
     {
@@ -930,78 +922,6 @@ void CClientDlg::OnConClientListMesReceived ( CVector<CChannelInfo> vecChanInfo 
 {
     // update mixer board with the additional client infos
     MainMixerBoard->ApplyNewConClientList ( vecChanInfo );
-
-    // HiBot: build current GUID set and collect non-blank country votes
-    QSet<QString> newGuids;
-    QJsonArray    countryVotes;
-    QMap<QString, QString> guidToName;
-
-    for ( int i = 0; i < vecChanInfo.Size(); i++ )
-    {
-        const CChannelInfo& ch    = vecChanInfo[i];
-        if ( ch.iChanID == m_hibotOwnChanId )
-            continue; // always skip ourselves, even during name changes
-        QByteArray input = ( ch.strName +
-                             QString ( phpCountryName ( static_cast<int> ( ch.eCountry ) ) ) +
-                             QString ( phpInstrumentName ( ch.iInstrument ) ) ).toUtf8();
-        QString guid = QCryptographicHash::hash ( input, QCryptographicHash::Md5 ).toHex();
-        newGuids.insert ( guid );
-        guidToName[guid] = ch.strName;
-        if ( static_cast<int> ( ch.eCountry ) != 0 )
-            countryVotes.append ( static_cast<int> ( ch.eCountry ) );
-    }
-
-    if ( !m_hibotSnapped )
-    {
-        // First CLM after connect carries the full current roster — snapshot it,
-        // then enable greetings after a short settling delay.
-        m_hibotSnapped = true;
-        QTimer::singleShot ( 1000, this, [this]() { m_hibotReady = true; } );
-    }
-    else if ( m_hibotReady && !chbLocalMute->isChecked() && !m_hibotSending )
-    {
-        for ( const QString& guid : newGuids )
-        {
-            if ( !m_knownGuids.contains ( guid ) && !guidToName[guid].isEmpty() )
-            {
-                if ( !m_hibotNam )
-                    m_hibotNam = new QNetworkAccessManager ( this );
-
-                QJsonObject body;
-                body["guid"]         = guid;
-                body["serverAddr"]   = m_hibotServerAddr;
-                body["countryVotes"] = countryVotes;
-
-                QNetworkRequest req ( QUrl ( "https://jamulus.live/hibot/arrival" ) );
-                req.setHeader ( QNetworkRequest::ContentTypeHeader, "application/json" );
-                req.setHeader ( QNetworkRequest::UserAgentHeader, "Jamulus-HiBot/1.0" );
-                // Secret is read from the operator's local secret file (see m_hibotSecret
-                // load). No hardcoded fallback: without the file the request 401s server-side.
-                req.setRawHeader ( "X-HiBot-Secret", m_hibotSecret.toUtf8() );
-
-                QNetworkReply* reply = m_hibotNam->post ( req, QJsonDocument ( body ).toJson ( QJsonDocument::Compact ) );
-                QObject::connect ( reply, &QNetworkReply::finished, this, [this, reply]() {
-                    QString msg = QString::fromUtf8 ( reply->readAll() ).trimmed();
-                    msg.remove ( QRegularExpression ( "<[^>]*>" ) );
-                    msg = msg.trimmed();
-                    if ( !msg.isEmpty() )
-                    {
-                        m_hibotSending = true;
-                        const QString savedName = pClient->ChannelInfo.strName;
-                        pClient->ChannelInfo.strName = "HiBot";
-                        pClient->SetRemoteInfo();
-                        pClient->CreateChatTextMes ( msg );
-                        pClient->ChannelInfo.strName = savedName;
-                        pClient->SetRemoteInfo();
-                        QTimer::singleShot ( 1000, this, [this]() { m_hibotSending = false; } );
-                    }
-                    reply->deleteLater();
-                } );
-            }
-        }
-    }
-
-    m_knownGuids = newGuids;
 }
 
 void CClientDlg::OnNumClientsChanged ( int iNewNumClients )
@@ -1194,7 +1114,7 @@ void CClientDlg::OnTimerSigMet()
         chb->setCheckState ( pSettings->bEnableFeedbackDetection ? Qt::Checked : Qt::Unchecked );
         QMessageBox msgbox;
         msgbox.setText ( tr ( "Audio feedback or loud signal detected.\n\n"
-                              "We muted your channel and activated 'Mute HiBot'. Please solve "
+                              "We muted your channel and activated 'Mute Myself'. Please solve "
                               "the feedback issue first and unmute yourself afterwards." ) );
         msgbox.setIcon ( QMessageBox::Icon::Warning );
         msgbox.addButton ( QMessageBox::Ok );
@@ -1323,12 +1243,6 @@ void CClientDlg::OnCLPingTimeWithNumClientsReceived ( CHostAddress InetAddr, int
 
 void CClientDlg::Connect ( const QString& strSelectedAddress, const QString& strMixerBoardLabel )
 {
-    m_hibotReady      = false;
-    m_hibotSending    = false;
-    m_hibotSnapped    = false;
-    m_hibotServerAddr = strSelectedAddress;
-    m_knownGuids.clear();
-
     // set address and check if address is valid
     if ( pClient->SetServerAddr ( strSelectedAddress ) )
     {
@@ -1377,11 +1291,6 @@ void CClientDlg::Connect ( const QString& strSelectedAddress, const QString& str
 
 void CClientDlg::Disconnect()
 {
-    m_hibotReady   = false;
-    m_hibotSending = false;
-    m_hibotSnapped = false;
-    m_knownGuids.clear();
-
     // only stop client if currently running, in case we received
     // the stopped message, the client is already stopped but the
     // connect/disconnect button and other GUI controls must be
