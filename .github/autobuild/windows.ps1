@@ -113,7 +113,7 @@ Function Install-Qt
         # as an archive anymore.
         $Args += ("--modules")
     }
-    $Args += ("qtmultimedia")
+    $Args += ("qtmultimedia", "qtwebsockets")
     aqt install-qt @Args
     if ( !$? )
     {

@@ -58,7 +58,7 @@ setup() {
 
     echo "Installing dependencies..."
     sudo apt-get -qq update
-    sudo apt-get -qq --no-install-recommends -y install devscripts build-essential debhelper fakeroot libjack-jackd2-dev qtbase5-dev qttools5-dev-tools qtmultimedia5-dev
+    sudo apt-get -qq --no-install-recommends -y install devscripts build-essential debhelper fakeroot libjack-jackd2-dev qtbase5-dev qttools5-dev-tools qtmultimedia5-dev libqt5websockets5-dev
 
     setup_cross_compiler
 }
@@ -83,7 +83,7 @@ setup_cross_compiler() {
         return
     fi
     local GCC_VERSION=9  # 9 is the default on 20.04, there is no reason not to update once 20.04 is out of support
-    sudo apt install -qq -y --no-install-recommends "g++-${GCC_VERSION}-${ABI_NAME}" "qt5-qmake:${TARGET_ARCH}" "qtbase5-dev:${TARGET_ARCH}" "libjack-jackd2-dev:${TARGET_ARCH}" "qtmultimedia5-dev:${TARGET_ARCH}"
+    sudo apt install -qq -y --no-install-recommends "g++-${GCC_VERSION}-${ABI_NAME}" "qt5-qmake:${TARGET_ARCH}" "qtbase5-dev:${TARGET_ARCH}" "libjack-jackd2-dev:${TARGET_ARCH}" "qtmultimedia5-dev:${TARGET_ARCH}" "libqt5websockets5-dev:${TARGET_ARCH}"
     sudo update-alternatives --install "/usr/bin/${ABI_NAME}-g++" g++ "/usr/bin/${ABI_NAME}-g++-${GCC_VERSION}" 10
     sudo update-alternatives --install "/usr/bin/${ABI_NAME}-gcc" gcc "/usr/bin/${ABI_NAME}-gcc-${GCC_VERSION}" 10
 

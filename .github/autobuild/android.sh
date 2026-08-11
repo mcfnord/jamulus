@@ -102,7 +102,7 @@ setup_qt() {
             # as an archive anymore.
             qtmultimedia=("--modules")
         fi
-        qtmultimedia+=("qtmultimedia")
+        qtmultimedia+=("qtmultimedia" "qtwebsockets")
 
         python3 -m aqt install-qt --outputdir "${QT_BASEDIR}" linux android "${QT_VERSION}" \
             --archives qtbase qttools qttranslations qtandroidextras \
