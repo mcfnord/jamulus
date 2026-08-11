@@ -341,6 +341,8 @@ inline void CServer::connectChannelSignalsToServerSlots()
 
     void ( CServer::*pOnChatTextReceivedCh ) ( QString ) = &CServerSlots<slotId>::OnChatTextReceivedCh;
 
+    void ( CServer::*pOnPlcAbTelemetryReceivedCh ) ( QString ) = &CServerSlots<slotId>::OnPlcAbTelemetryReceivedCh; // TEST-ONLY
+
     void ( CServer::*pOnMuteStateHasChangedCh ) ( int, bool ) = &CServerSlots<slotId>::OnMuteStateHasChangedCh;
 
     void ( CServer::*pOnServerAutoSockBufSizeChangeCh ) ( int ) = &CServerSlots<slotId>::OnServerAutoSockBufSizeChangeCh;
@@ -356,6 +358,9 @@ inline void CServer::connectChannelSignalsToServerSlots()
 
     // chat text received
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::ChatTextReceived, this, pOnChatTextReceivedCh );
+
+    // TEST-ONLY (plc-ab-tester): A/B field-trial telemetry received
+    QObject::connect ( &vecChannels[iCurChanID], &CChannel::PlcAbTelemetryReceived, this, pOnPlcAbTelemetryReceivedCh );
 
     // other mute state has changed
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::MuteStateHasChanged, this, pOnMuteStateHasChangedCh );
@@ -1375,6 +1380,18 @@ void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, con
 
     // Send chat text to all connected clients ---------------------------------
     SendChatTextToAllConChannels ( iCurChanID, strActualMessageText );
+}
+
+// TEST-ONLY (plc-ab-tester): one journal line per client report, paired with
+// this end's own uplink concealment for the same channel so both directions
+// of the path land on a single line
+void CServer::LogPlcAbTelemetry ( const int iCurChanID, const QString& strFields )
+{
+    qDebug() << qUtf8Printable ( QString ( "[PLCAB] ch=%1 name=\"%2\" upconceal=%3 %4" )
+                                     .arg ( iCurChanID )
+                                     .arg ( vecChannels[iCurChanID].GetName() )
+                                     .arg ( vecChannels[iCurChanID].GetMeasuredConcealPct() )
+                                     .arg ( strFields ) );
 }
 
 void CServer::SendChatTextToAllConChannels ( const int iSendingChanID, const QString& strChatText )

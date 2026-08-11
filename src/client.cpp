@@ -216,6 +216,41 @@ CClient::CClient ( const quint16  iPortNumber,
 
     QObject::connect ( &TimerGainOrPan, &QTimer::timeout, this, &CClient::OnTimerRemoteChanGainOrPan );
 
+    // TEST-ONLY (plc-ab-tester): read the A/B knobs once and wire the timers
+    {
+        const char* pEnv;
+        if ( ( pEnv = getenv ( "JAM_AB" ) ) && ( atoi ( pEnv ) == 0 ) )
+        {
+            bPlcAbEnabled = false;
+        }
+        if ( ( pEnv = getenv ( "JAM_AB_LO" ) ) )
+        {
+            iPlcAbLo = atoi ( pEnv );
+        }
+        if ( ( pEnv = getenv ( "JAM_AB_HI" ) ) )
+        {
+            iPlcAbHi = atoi ( pEnv );
+        }
+        if ( ( pEnv = getenv ( "JAM_AB_SECS" ) ) && ( atoi ( pEnv ) > 0 ) )
+        {
+            iPlcAbSegSecs = atoi ( pEnv );
+        }
+        if ( ( pEnv = getenv ( "JAM_AB_TLM_SECS" ) ) && ( atoi ( pEnv ) > 0 ) )
+        {
+            iPlcAbTlmSecs = atoi ( pEnv );
+        }
+
+        QObject::connect ( &TimerPlcAb, &QTimer::timeout, this, &CClient::OnTimerPlcAb );
+        QObject::connect ( &TimerPlcAbTelemetry, &QTimer::timeout, this, &CClient::OnTimerPlcAbTelemetry );
+
+        qDebug() << qUtf8Printable ( QString ( "[PLCAB] config enabled=%1 lo=%2 hi=%3 seg_secs=%4 tlm_secs=%5" )
+                                         .arg ( bPlcAbEnabled )
+                                         .arg ( iPlcAbLo )
+                                         .arg ( iPlcAbHi )
+                                         .arg ( iPlcAbSegSecs )
+                                         .arg ( iPlcAbTlmSecs ) );
+    }
+
     // start the socket (it is important to start the socket after all
     // initializations and connections)
     Socket.Start();
@@ -535,6 +570,56 @@ void CClient::SetRemoteChanGain ( const int iId, const float fGain, const bool b
     Channel.SetRemoteChanGain ( clientChan->iServerChannelID, fGain ); // translate client channel to server channel ID
 
     StartTimerGainOrPan();
+}
+
+// TEST-ONLY (plc-ab-tester): flip to the other A/B arm; the audio thread
+// picks the new target up before its next encode (ProcessAudioDataIntern)
+void CClient::OnTimerPlcAb()
+{
+    iPlcAbSegIdx++;
+
+    const int iNewTarget = ( iPlcAbTarget.load ( std::memory_order_relaxed ) == iPlcAbHi ) ? iPlcAbLo : iPlcAbHi;
+    iPlcAbTarget.store ( iNewTarget, std::memory_order_relaxed );
+
+    qDebug() << qUtf8Printable ( QString ( "[PLCAB] segment=%1 plc=%2" ).arg ( iPlcAbSegIdx ).arg ( iNewTarget ) );
+}
+
+// TEST-ONLY (plc-ab-tester): ship the cumulative counters to the server over
+// the existing connection. Runs on the main thread; nothing here touches the
+// audio path beyond relaxed atomic loads.
+void CClient::OnTimerPlcAbTelemetry()
+{
+    if ( !Channel.IsConnected() )
+    {
+        return;
+    }
+
+    CPlcAbTelemetry Tlm;
+    Tlm.iSeq             = iPlcAbTlmSeq++;
+    Tlm.iUptimeSecs      = static_cast<uint32_t> ( PlcAbUptime.elapsed() / 1000 );
+    Tlm.iPlcActive       = iPlcAbTarget.load ( std::memory_order_relaxed );
+    Tlm.iSegmentIdx      = iPlcAbSegIdx;
+    Tlm.iCodecType       = static_cast<int> ( Channel.GetAudioCompressionType() );
+    Tlm.iNumAudioChans   = Channel.GetNumAudioChannels();
+    Tlm.iJitBufBlocks    = Channel.GetSockBufNumFrames();
+    Tlm.bAutoJitBuf      = Channel.GetDoAutoSockBufSize();
+    Tlm.iConcealFailsCum = Channel.GetConcealFailsCum();
+    Tlm.iBlocksCum       = Channel.GetConcealBlocksCum();
+    Tlm.iClipCum         = iPlcAbClipCum.load ( std::memory_order_relaxed );
+    Tlm.iConcealPctWin   = Channel.GetMeasuredConcealPct();
+
+    Channel.CreatePlcAbTelemetryMes ( Tlm );
+
+    // local copy of the same record, so a headless run needs no server access
+    qDebug() << qUtf8Printable ( QString ( "[PLCAB] tlm seq=%1 up=%2 plc=%3 seg=%4 concealCum=%5/%6 clip=%7 win=%8" )
+                                     .arg ( Tlm.iSeq )
+                                     .arg ( Tlm.iUptimeSecs )
+                                     .arg ( Tlm.iPlcActive )
+                                     .arg ( Tlm.iSegmentIdx )
+                                     .arg ( Tlm.iConcealFailsCum )
+                                     .arg ( Tlm.iBlocksCum )
+                                     .arg ( Tlm.iClipCum )
+                                     .arg ( Tlm.iConcealPctWin ) );
 }
 
 void CClient::OnTimerRemoteChanGainOrPan()
@@ -1059,6 +1144,20 @@ void CClient::Start()
     // initialise client channels
     ClearClientChannels();
 
+    // TEST-ONLY (plc-ab-tester): every session starts in the HI arm (35 = the
+    // value shipped code uses), fresh counters, fresh segment numbering
+    if ( bPlcAbEnabled )
+    {
+        iPlcAbSegIdx = 0;
+        iPlcAbTlmSeq = 0;
+        iPlcAbTarget.store ( iPlcAbHi, std::memory_order_relaxed );
+        iPlcAbClipCum.store ( 0, std::memory_order_relaxed );
+        Channel.ResetConcealCumCounters();
+        PlcAbUptime.start();
+        TimerPlcAb.start ( iPlcAbSegSecs * 1000 );
+        TimerPlcAbTelemetry.start ( iPlcAbTlmSecs * 1000 );
+    }
+
     // enable channel
     Channel.SetEnable ( true );
 
@@ -1073,6 +1172,10 @@ void CClient::Start()
 
 void CClient::Stop()
 {
+    // TEST-ONLY (plc-ab-tester)
+    TimerPlcAb.stop();
+    TimerPlcAbTelemetry.stop();
+
     // stop audio interface
     Sound.Stop();
 
@@ -1519,6 +1622,22 @@ void CClient::ProcessAudioDataIntern ( CVector<int16_t>& vecsStereoSndCrd )
         }
     }
 
+    // TEST-ONLY (plc-ab-tester): apply a pending A/B change here on the audio
+    // thread, which owns the encoder objects. Only the OPUS64 encoders are set:
+    // legacy CT_OPUS runs at complexity 1, where this ctl is a byte-identical
+    // no-op (DISCOVERIES Job 54)
+    if ( bPlcAbEnabled )
+    {
+        const int iPlcTarget = iPlcAbTarget.load ( std::memory_order_relaxed );
+
+        if ( iPlcTarget != iPlcAbApplied )
+        {
+            opus_custom_encoder_ctl ( Opus64EncoderMono, OPUS_SET_PACKET_LOSS_PERC ( iPlcTarget ) );
+            opus_custom_encoder_ctl ( Opus64EncoderStereo, OPUS_SET_PACKET_LOSS_PERC ( iPlcTarget ) );
+            iPlcAbApplied = iPlcTarget;
+        }
+    }
+
     for ( i = 0, j = 0; i < iSndCrdFrameSizeFactor; i++, j += iNumAudioChannels * iOPUSFrameSizeSamples )
     {
         // OPUS encoding or copying RAW audio?
@@ -1601,6 +1720,30 @@ void CClient::ProcessAudioDataIntern ( CVector<int16_t>& vecsStereoSndCrd )
                 // missing audio - fill with silence
                 memset ( &vecsStereoSndCrd[j], 0, iCeltNumCodedBytes );
             }
+        }
+    }
+
+    // TEST-ONLY (plc-ab-tester): count full-scale samples in the network audio
+    // just decoded - the alignment-free clipping metric from the rig-plc lab
+    // runs (peaks2.py counts |x| >= 32767 the same way). Bounded integer
+    // compares over exactly the region the decode loop wrote; the only shared
+    // write is one relaxed fetch_add, and only on frames that clipped.
+    if ( bPlcAbEnabled )
+    {
+        const int iNumDecodedSam = iSndCrdFrameSizeFactor * iNumAudioChannels * iOPUSFrameSizeSamples;
+        uint32_t  iClips         = 0;
+
+        for ( i = 0; i < iNumDecodedSam; i++ )
+        {
+            if ( ( vecsStereoSndCrd[i] >= 32767 ) || ( vecsStereoSndCrd[i] <= -32767 ) )
+            {
+                iClips++;
+            }
+        }
+
+        if ( iClips > 0 )
+        {
+            iPlcAbClipCum.fetch_add ( iClips, std::memory_order_relaxed );
         }
     }
 

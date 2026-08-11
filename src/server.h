@@ -84,6 +84,9 @@ public:
 
     void OnChatTextReceivedCh ( QString strChatText ) { CreateAndSendChatTextForAllConChannels ( slotId - 1, strChatText ); }
 
+    // TEST-ONLY (plc-ab-tester)
+    void OnPlcAbTelemetryReceivedCh ( QString strFields ) { LogPlcAbTelemetry ( slotId - 1, strFields ); }
+
     void OnMuteStateHasChangedCh ( int iChanID, bool bIsMuted ) { CreateOtherMuteStateChanged ( slotId - 1, iChanID, bIsMuted ); }
 
     void OnServerAutoSockBufSizeChangeCh ( int iNNumFra ) { CreateAndSendJitBufMessage ( slotId - 1, iNNumFra ); }
@@ -94,6 +97,8 @@ protected:
     virtual void CreateAndSendChanListForThisChan ( const int iCurChanID ) = 0;
 
     virtual void CreateAndSendChatTextForAllConChannels ( const int iCurChanID, const QString& strChatText ) = 0;
+
+    virtual void LogPlcAbTelemetry ( const int iCurChanID, const QString& strFields ) = 0; // TEST-ONLY (plc-ab-tester)
 
     virtual void CreateOtherMuteStateChanged ( const int iCurChanID, const int iOtherChanID, const bool bIsMuted ) = 0;
 
@@ -212,6 +217,8 @@ protected:
     virtual void CreateAndSendChanListForThisChan ( const int iCurChanID );
 
     virtual void CreateAndSendChatTextForAllConChannels ( const int iCurChanID, const QString& strChatText );
+
+    virtual void LogPlcAbTelemetry ( const int iCurChanID, const QString& strFields ); // TEST-ONLY (plc-ab-tester)
 
     virtual void CreateOtherMuteStateChanged ( const int iCurChanID, const int iOtherChanID, const bool bIsMuted );
 

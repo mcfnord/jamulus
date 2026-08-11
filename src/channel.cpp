@@ -113,6 +113,9 @@ CChannel::CChannel ( const bool bNIsServer ) :
 
     QObject::connect ( &Protocol, &CProtocol::ChatTextReceived, this, &CChannel::ChatTextReceived );
 
+    // TEST-ONLY (plc-ab-tester)
+    QObject::connect ( &Protocol, &CProtocol::PlcAbTelemetryReceived, this, &CChannel::PlcAbTelemetryReceived );
+
     QObject::connect ( &Protocol, &CProtocol::NetTranspPropsReceived, this, &CChannel::OnNetTranspPropsReceived );
 
     QObject::connect ( &Protocol, &CProtocol::ReqNetTranspProps, this, &CChannel::OnReqNetTranspProps );
@@ -693,10 +696,12 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
         if ( ( eGetStatus == GS_BUFFER_OK ) || ( eGetStatus == GS_BUFFER_UNDERRUN ) )
         {
             iConcealWindowCount++;
+            iConcealBlocksCum.fetch_add ( 1, std::memory_order_relaxed ); // TEST-ONLY (plc-ab-tester)
 
             if ( eGetStatus == GS_BUFFER_UNDERRUN )
             {
                 iConcealFailCount++;
+                iConcealFailsCum.fetch_add ( 1, std::memory_order_relaxed ); // TEST-ONLY (plc-ab-tester)
             }
 
             if ( iConcealWindowCount >= iConcealWindowLen )

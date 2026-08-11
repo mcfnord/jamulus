@@ -200,6 +200,23 @@ public:
     // (rare, main-thread-driven) so an unsynchronized read here is harmless for a log line
     int GetConcealWindowLen() const { return iConcealWindowLen; }
 
+    // TEST-ONLY (plc-ab-tester): cumulative-since-connect concealment counters,
+    // and the telemetry send path. Cumulative so a lost report costs nothing.
+    uint32_t GetConcealFailsCum() const { return iConcealFailsCum.load ( std::memory_order_relaxed ); }
+    uint32_t GetConcealBlocksCum() const { return iConcealBlocksCum.load ( std::memory_order_relaxed ); }
+    void     ResetConcealCumCounters()
+    {
+        iConcealFailsCum.store ( 0, std::memory_order_relaxed );
+        iConcealBlocksCum.store ( 0, std::memory_order_relaxed );
+    }
+    void CreatePlcAbTelemetryMes ( const CPlcAbTelemetry& Tlm )
+    {
+        if ( ProtocolIsEnabled() )
+        {
+            Protocol.CreatePlcAbTelemetryMes ( Tlm );
+        }
+    }
+
 protected:
     bool ProtocolIsEnabled();
 
@@ -222,6 +239,7 @@ protected:
         iConcealWindowCount = 0;
         iConcealFailCount   = 0;
         iMeasuredConcealPct.store ( -1, std::memory_order_relaxed );
+        ResetConcealCumCounters(); // TEST-ONLY (plc-ab-tester): same slot-reuse hazard
     }
 
     // connection parameters
@@ -269,6 +287,11 @@ protected:
     int              iConcealWindowCount = 0;                     // blocks seen in the current window
     int              iConcealFailCount   = 0;                     // of those, blocks the buffer could not supply
     std::atomic<int> iMeasuredConcealPct { -1 };                  // -1 = no complete window yet
+
+    // TEST-ONLY (plc-ab-tester): cumulative counterparts of the window pair
+    // above; atomics because the telemetry timer reads them off-thread
+    std::atomic<uint32_t> iConcealFailsCum { 0 };
+    std::atomic<uint32_t> iConcealBlocksCum { 0 };
 
     QMutex Mutex;
     QMutex MutexSocketBuf;
@@ -322,6 +345,7 @@ signals:
     void MuteStateHasChangedReceived ( int iChanID, bool bIsMuted );
     void ReqChanInfo();
     void ChatTextReceived ( QString strChatText );
+    void PlcAbTelemetryReceived ( QString strFields ); // TEST-ONLY (plc-ab-tester)
     void ReqNetTranspProps();
     void LicenceRequired ( ELicenceType eLicenceType );
     void VersionAndOSReceived ( COSUtil::EOpSystemType eOSType, QString strVersion );

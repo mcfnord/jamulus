@@ -453,6 +453,31 @@ protected:
     int    maxGainOrPanId;
     int    iCurPingTime;
 
+    // TEST-ONLY (plc-ab-tester branch): within-tester A/B of the OPUS64
+    // encoders' OPUS_SET_PACKET_LOSS_PERC, plus telemetry back to the server.
+    // The commanded value crosses to the audio thread through iPlcAbTarget
+    // (relaxed atomic); the ctl itself runs on the audio thread, which owns
+    // the encoder objects, so there is no cross-thread encoder access.
+    // Env knobs: JAM_AB=0 disables (stock behaviour), JAM_AB_LO / JAM_AB_HI
+    // (default 0 / 35), JAM_AB_SECS segment length (default 120),
+    // JAM_AB_TLM_SECS telemetry period (default 10).
+    QTimer                TimerPlcAb;
+    QTimer                TimerPlcAbTelemetry;
+    QElapsedTimer         PlcAbUptime;
+    std::atomic<int>      iPlcAbTarget { 35 };
+    int                   iPlcAbApplied = 35; // audio-thread-only
+    int                   iPlcAbLo      = 0;
+    int                   iPlcAbHi      = 35;
+    int                   iPlcAbSegSecs = 120;
+    int                   iPlcAbTlmSecs = 10;
+    bool                  bPlcAbEnabled = true;
+    int                   iPlcAbSegIdx  = 0;
+    uint32_t              iPlcAbTlmSeq  = 0;
+    std::atomic<uint32_t> iPlcAbClipCum { 0 }; // full-scale samples in decoded output
+
+    void OnTimerPlcAb();
+    void OnTimerPlcAbTelemetry();
+
 protected slots:
     void OnHandledSignal ( int sigNum );
     void OnSendProtMessage ( CVector<uint8_t> vecMessage );

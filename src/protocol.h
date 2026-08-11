@@ -85,6 +85,8 @@
 #define PROTMESSID_REQ_SPLIT_MESS_SUPPORT   34 // request support for split messages
 #define PROTMESSID_SPLIT_MESS_SUPPORTED     35 // split messages are supported
 #define PROTMESSID_RAWAUDIO_SUPPORTED       36 // raw (uncompressed) audio is supported
+// 37 is reserved for PROTMESSID_CONCEAL_RATE (PLAN-ADAPTIVE-PLC.md Step 4)
+#define PROTMESSID_PLC_AB_TELEMETRY         38 // TEST-ONLY (plc-ab-tester branch): A/B loss_perc field-trial counters
 
 // message IDs of connection less messages (CLM)
 // DEFINITION -> start at 1000, end at 1999, see IsConnectionLessMessageID
@@ -125,6 +127,26 @@
 #define MESS_SPLIT_PART_SIZE_BYTES 550
 #define MAX_NUM_MESS_SPLIT_PARTS   ( MAX_SIZE_BYTES_NETW_BUF / MESS_SPLIT_PART_SIZE_BYTES )
 
+// TEST-ONLY (plc-ab-tester branch): payload of PROTMESSID_PLC_AB_TELEMETRY.
+// All counters are cumulative since connect, so a report lost beyond the
+// protocol's resend-until-ACK still costs nothing - the next one carries the
+// totals. Wire format is fixed at 30 bytes, version tag first.
+struct CPlcAbTelemetry
+{
+    uint32_t iSeq;             // telemetry message counter
+    uint32_t iUptimeSecs;      // seconds since the client started audio
+    int      iPlcActive;       // OPUS_SET_PACKET_LOSS_PERC currently commanded
+    int      iSegmentIdx;      // A/B segment counter (parity = which arm)
+    int      iCodecType;       // EAudComprType of the connection
+    int      iNumAudioChans;   // decoded channel count
+    int      iJitBufBlocks;    // client's local jitter-buffer setting
+    bool     bAutoJitBuf;      // auto jitter buffer active
+    uint32_t iConcealFailsCum; // downlink blocks the buffer could not supply
+    uint32_t iBlocksCum;       // downlink blocks requested (denominator)
+    uint32_t iClipCum;         // full-scale samples in the decoded output
+    int      iConcealPctWin;   // current ~2 s window percentage, -1 = none yet
+};
+
 /* Classes ********************************************************************/
 class CProtocol : public QObject
 {
@@ -152,6 +174,7 @@ public:
     void CreateReqSplitMessSupportMes();
     void CreateSplitMessSupportedMes();
     void CreateRawAudioSupportedMes();
+    void CreatePlcAbTelemetryMes ( const CPlcAbTelemetry& Tlm ); // TEST-ONLY (plc-ab-tester)
     void CreateLicenceRequiredMes ( const ELicenceType eLicenceType );
     void CreateOpusSupportedMes();
 
@@ -289,6 +312,7 @@ protected:
     bool EvaluateReqSplitMessSupportMes();
     bool EvaluateSplitMessSupportedMes();
     bool EvaluateRawAudioSupportedMes();
+    bool EvaluatePlcAbTelemetryMes ( const CVector<uint8_t>& vecData ); // TEST-ONLY (plc-ab-tester)
     bool EvaluateLicenceRequiredMes ( const CVector<uint8_t>& vecData );
     bool EvaluateVersionAndOSMes ( const CVector<uint8_t>& vecData );
     bool EvaluateRecorderStateMes ( const CVector<uint8_t>& vecData );
@@ -355,6 +379,9 @@ signals:
     void ReqSplitMessSupport();
     void SplitMessSupported();
     void RawAudioSupported();
+    // TEST-ONLY (plc-ab-tester): parsed fields pre-formatted as "k=v" text, so
+    // the receiver only has to log them - mirrors the ChatTextReceived shape
+    void PlcAbTelemetryReceived ( QString strFields );
     void LicenceRequired ( ELicenceType eLicenceType );
     void VersionAndOSReceived ( COSUtil::EOpSystemType eOSType, QString strVersion );
     void RecorderStateReceived ( ERecorderState eRecorderState );
