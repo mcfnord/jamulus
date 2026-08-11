@@ -63,6 +63,8 @@
 #define PROTMESSID_REQ_SPLIT_MESS_SUPPORT   34 // request support for split messages
 #define PROTMESSID_SPLIT_MESS_SUPPORTED     35 // split messages are supported
 #define PROTMESSID_RAWAUDIO_SUPPORTED       36 // raw (uncompressed) audio is supported
+// 37 reserved for PROTMESSID_CONCEAL_RATE (PLAN-ADAPTIVE-PLC.md Step 4)
+#define PROTMESSID_PLC_AB_TELEMETRY         38 // TEST-ONLY (plc-ab-tester): A/B field-trial counters
 
 // message IDs of connection less messages (CLM)
 // DEFINITION -> start at 1000, end at 1999, see IsConnectionLessMessageID
@@ -262,6 +264,7 @@ protected:
     bool EvaluateReqSplitMessSupportMes();
     bool EvaluateSplitMessSupportedMes();
     bool EvaluateRawAudioSupportedMes();
+    bool EvaluatePlcAbTelemetryMes ( const CVector<uint8_t>& vecData ); // TEST-ONLY (plc-ab-tester)
     bool EvaluateLicenceRequiredMes ( const CVector<uint8_t>& vecData );
     bool EvaluateVersionAndOSMes ( const CVector<uint8_t>& vecData );
     bool EvaluateRecorderStateMes ( const CVector<uint8_t>& vecData );
@@ -327,6 +330,7 @@ signals:
     void ReqSplitMessSupport();
     void SplitMessSupported();
     void RawAudioSupported();
+    void PlcAbTelemetryReceived ( QString strFields ); // TEST-ONLY (plc-ab-tester)
     void LicenceRequired ( ELicenceType eLicenceType );
     void VersionAndOSReceived ( COSUtil::EOpSystemType eOSType, QString strVersion );
     void RecorderStateReceived ( ERecorderState eRecorderState );

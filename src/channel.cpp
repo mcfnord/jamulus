@@ -91,6 +91,9 @@ CChannel::CChannel ( const bool bNIsServer ) :
 
     QObject::connect ( &Protocol, &CProtocol::ChatTextReceived, this, &CChannel::ChatTextReceived );
 
+    // TEST-ONLY (plc-ab-tester)
+    QObject::connect ( &Protocol, &CProtocol::PlcAbTelemetryReceived, this, &CChannel::PlcAbTelemetryReceived );
+
     QObject::connect ( &Protocol, &CProtocol::NetTranspPropsReceived, this, &CChannel::OnNetTranspPropsReceived );
 
     QObject::connect ( &Protocol, &CProtocol::ReqNetTranspProps, this, &CChannel::OnReqNetTranspProps );
@@ -206,6 +209,13 @@ void CChannel::SetAudioStreamProperties ( const EAudComprType eNewAudComprType,
             // init socket buffer
             SockBuf.SetUseDoubleSystemFrameSize ( eAudioCompressionType == CT_OPUS ); // NOTE must be set BEFORE the init()
             SockBuf.Init ( iCeltNumCodedBytes, iCurSockBufNumFrames, bUseSequenceNumber );
+
+            // (re-)size the concealment-rate window for the new frame size and reset it
+            // (PLAN-ADAPTIVE-PLC.md Step 1c)
+            iConcealWindowLen   = ( eAudioCompressionType == CT_OPUS ) ? CONCEAL_WINDOW_BLOCKS_DOUBLE_FRAME_SIZE : CONCEAL_WINDOW_BLOCKS;
+            iConcealWindowCount = 0;
+            iConcealFailCount   = 0;
+            iMeasuredConcealPct.store ( -1, std::memory_order_relaxed );
         }
         MutexSocketBuf.unlock();
 
@@ -455,6 +465,13 @@ void CChannel::OnNetTranspPropsReceived ( CNetworkTransportProps NetworkTranspor
                 // minimum network frame size)
                 SockBuf.SetUseDoubleSystemFrameSize ( eAudioCompressionType == CT_OPUS ); // NOTE must be set BEFORE the init()
                 SockBuf.Init ( iCeltNumCodedBytes, iCurSockBufNumFrames, bUseSequenceNumber );
+
+                // (re-)size the concealment-rate window for the new frame size and reset it
+                // (PLAN-ADAPTIVE-PLC.md Step 1c)
+                iConcealWindowLen   = ( eAudioCompressionType == CT_OPUS ) ? CONCEAL_WINDOW_BLOCKS_DOUBLE_FRAME_SIZE : CONCEAL_WINDOW_BLOCKS;
+                iConcealWindowCount = 0;
+                iConcealFailCount   = 0;
+                iMeasuredConcealPct.store ( -1, std::memory_order_relaxed );
             }
             MutexSocketBuf.unlock();
 
@@ -645,6 +662,30 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
         {
             // channel is disconnected
             eGetStatus = GS_CHAN_NOT_CONNECTED;
+        }
+
+        // concealment-rate measurement (PLAN-ADAPTIVE-PLC.md): count only while
+        // connected; cumulative twins feed the plc-ab-tester telemetry
+        if ( ( eGetStatus == GS_BUFFER_OK ) || ( eGetStatus == GS_BUFFER_UNDERRUN ) )
+        {
+            iConcealWindowCount++;
+            iConcealBlocksCum.fetch_add ( 1, std::memory_order_relaxed );
+
+            if ( eGetStatus == GS_BUFFER_UNDERRUN )
+            {
+                iConcealFailCount++;
+                iConcealFailsCum.fetch_add ( 1, std::memory_order_relaxed );
+            }
+
+            if ( iConcealWindowCount >= iConcealWindowLen )
+            {
+                // round, don't truncate: truncation reads up to ~1% low
+                iMeasuredConcealPct.store ( ( iConcealFailCount * 100 + iConcealWindowLen / 2 ) / iConcealWindowLen,
+                                            std::memory_order_relaxed );
+
+                iConcealWindowCount = 0;
+                iConcealFailCount   = 0;
+            }
         }
     }
     MutexSocketBuf.unlock();

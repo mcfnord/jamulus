@@ -139,6 +139,17 @@ public:
     }
 
     EAudComprType GetAudioCompressionType() { return eAudioCompressionType; }
+    // concealment-rate measurement (PLAN-ADAPTIVE-PLC.md): -1 = no complete window yet
+    int GetMeasuredConcealPct() const { return iMeasuredConcealPct.load ( std::memory_order_relaxed ); }
+    int GetConcealWindowLen() const { return iConcealWindowLen; }
+    // TEST-ONLY (plc-ab-tester): cumulative-since-connect counterparts
+    uint32_t GetConcealFailsCum() const { return iConcealFailsCum.load ( std::memory_order_relaxed ); }
+    uint32_t GetConcealBlocksCum() const { return iConcealBlocksCum.load ( std::memory_order_relaxed ); }
+    void     ResetConcealCumCounters()
+    {
+        iConcealFailsCum.store ( 0, std::memory_order_relaxed );
+        iConcealBlocksCum.store ( 0, std::memory_order_relaxed );
+    }
     int           GetNumAudioChannels() const { return iNumAudioChannels; }
 
     // network protocol interface
@@ -185,6 +196,13 @@ protected:
         iCeltNumCodedBytes    = CELT_MINIMUM_NUM_BYTES;
         iNumAudioChannels     = 1; // mono
         bUseSequenceNumber    = false;
+
+        // discard the concealment measurement: this channel object is reused for
+        // the next client on this slot (PLAN-ADAPTIVE-PLC.md Step 1c)
+        iConcealWindowCount = 0;
+        iConcealFailCount   = 0;
+        iMeasuredConcealPct.store ( -1, std::memory_order_relaxed );
+        ResetConcealCumCounters();
     }
 
     // connection parameters
@@ -226,6 +244,15 @@ protected:
 
     EAudComprType eAudioCompressionType;
     int           iNumAudioChannels;
+
+    // concealment-rate measurement (PLAN-ADAPTIVE-PLC.md)
+    int              iConcealWindowLen   = CONCEAL_WINDOW_BLOCKS; // per frame size
+    int              iConcealWindowCount = 0;                     // blocks seen in the current window
+    int              iConcealFailCount   = 0;                     // of those, blocks the buffer could not supply
+    std::atomic<int> iMeasuredConcealPct { -1 };                  // -1 = no complete window yet
+    // TEST-ONLY (plc-ab-tester): cumulative counterparts, read off-thread by telemetry
+    std::atomic<uint32_t> iConcealFailsCum { 0 };
+    std::atomic<uint32_t> iConcealBlocksCum { 0 };
 
     QMutex Mutex;
     QMutex MutexSocketBuf;
@@ -279,6 +306,7 @@ signals:
     void MuteStateHasChangedReceived ( int iChanID, bool bIsMuted );
     void ReqChanInfo();
     void ChatTextReceived ( QString strChatText );
+    void PlcAbTelemetryReceived ( QString strFields ); // TEST-ONLY (plc-ab-tester)
     void ReqNetTranspProps();
     void LicenceRequired ( ELicenceType eLicenceType );
     void VersionAndOSReceived ( COSUtil::EOpSystemType eOSType, QString strVersion );

@@ -822,6 +822,10 @@ void CProtocol::ParseMessageBody ( const CVector<uint8_t>& vecbyMesBodyData, con
                     EvaluateRawAudioSupportedMes();
                     break;
 
+                case PROTMESSID_PLC_AB_TELEMETRY:
+                    EvaluatePlcAbTelemetryMes ( vecbyMesBodyDataRef );
+                    break;
+
                 case PROTMESSID_LICENCE_REQUIRED:
                     EvaluateLicenceRequiredMes ( vecbyMesBodyDataRef );
                     break;
@@ -1539,6 +1543,54 @@ bool CProtocol::EvaluateRawAudioSupportedMes()
 {
     // invoke message action
     emit RawAudioSupported();
+
+    return false; // no error
+}
+
+// TEST-ONLY (plc-ab-tester branch): A/B loss_perc field-trial telemetry.
+// 30 bytes fixed: ver(1) seq(4) uptime(4) plc(1) seg(2) codec(1) nch(1)
+// jbuf(2) auto(1) fails(4) blocks(4) clip(4) win(1). Receiver only on the
+// fleet build - the sending side lives in the tester client branch.
+bool CProtocol::EvaluatePlcAbTelemetryMes ( const CVector<uint8_t>& vecData )
+{
+    int iPos = 0; // init position pointer
+
+    if ( vecData.Size() != 30 )
+    {
+        return true; // return error code
+    }
+
+    if ( GetValFromStream ( vecData, iPos, 1 ) != 1 )
+    {
+        return true; // unknown wire format version
+    }
+
+    const uint32_t iSeq        = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iUptimeSecs = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const int      iPlcActive  = static_cast<int> ( GetValFromStream ( vecData, iPos, 1 ) );
+    const int      iSegmentIdx = static_cast<int> ( GetValFromStream ( vecData, iPos, 2 ) );
+    const int      iCodecType  = static_cast<int> ( GetValFromStream ( vecData, iPos, 1 ) );
+    const int      iNumChans   = static_cast<int> ( GetValFromStream ( vecData, iPos, 1 ) );
+    const int      iJitBuf     = static_cast<int> ( GetValFromStream ( vecData, iPos, 2 ) );
+    const int      iAutoJitBuf = static_cast<int> ( GetValFromStream ( vecData, iPos, 1 ) );
+    const uint32_t iFailsCum   = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iBlocksCum  = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iClipCum    = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const int      iWinRaw     = static_cast<int> ( GetValFromStream ( vecData, iPos, 1 ) );
+
+    emit PlcAbTelemetryReceived ( QString ( "seq=%1 up=%2 plc=%3 seg=%4 codec=%5 nch=%6 jbuf=%7 auto=%8 concealCum=%9/%10 clip=%11 win=%12" )
+                                      .arg ( iSeq )
+                                      .arg ( iUptimeSecs )
+                                      .arg ( iPlcActive )
+                                      .arg ( iSegmentIdx )
+                                      .arg ( iCodecType )
+                                      .arg ( iNumChans )
+                                      .arg ( iJitBuf )
+                                      .arg ( iAutoJitBuf )
+                                      .arg ( iFailsCum )
+                                      .arg ( iBlocksCum )
+                                      .arg ( iClipCum )
+                                      .arg ( iWinRaw == 255 ? -1 : iWinRaw ) );
 
     return false; // no error
 }
