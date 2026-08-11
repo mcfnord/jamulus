@@ -26,7 +26,6 @@
 
 #include "util.h"
 #include "global.h"
-#include <atomic>
 
 /* Definitions ****************************************************************/
 // number of simulation network jitter buffers for evaluating the statistic
@@ -234,50 +233,7 @@ protected:
 class CNetBuf
 {
 public:
-    CNetBuf ( const bool bNIsSim = false ) :
-        iSequenceNumberAtGetPos ( 0 ),
-        bIsSimulation ( bNIsSim ),
-        bIsInitialized ( false ),
-        iOccSinceBin ( 0 ),
-        iOccSamples ( 0 ),
-        iOccSkipped ( 0 )
-    {
-        // std::atomic is not zero-initialised by default
-        ResetOccCensus();
-    }
-
-    // ---- #2979 arm 6 FLEETOCC occupancy census (print only, no behaviour change) ----
-    // Read by CServer::OnTimerCapacityLog on the main thread; written on the mixing
-    // thread in Get().  Relaxed atomics: the counters are independent, so no ordering
-    // between them is needed and none is claimed.
-    //
-    // Reset from Init(), NOT only from the constructor.  A server reuses its channel
-    // objects across clients, so a constructor-only reset would accumulate one
-    // histogram over many different clients at different configured sizes, and the
-    // fill/size ratio -- the entire point of the census -- would be meaningless.
-    void ResetOccCensus()
-    {
-        iOccSinceBin = 0;
-        iOccSamples.store ( 0, std::memory_order_relaxed );
-        iOccSkipped.store ( 0, std::memory_order_relaxed );
-
-        for ( int iOccIdx = 0; iOccIdx <= MAX_NET_BUF_SIZE_NUM_BL; iOccIdx++ )
-        {
-            aOccHist[iOccIdx].store ( 0, std::memory_order_relaxed );
-        }
-    }
-
-    void GetOccCensus ( uint32_t& iNumSamples, uint32_t& iNumSkipped, uint32_t aHist[] ) const
-    {
-        iNumSamples = iOccSamples.load ( std::memory_order_relaxed );
-        iNumSkipped = iOccSkipped.load ( std::memory_order_relaxed );
-
-        for ( int iOccIdx = 0; iOccIdx <= MAX_NET_BUF_SIZE_NUM_BL; iOccIdx++ )
-        {
-            aHist[iOccIdx] = aOccHist[iOccIdx].load ( std::memory_order_relaxed );
-        }
-    }
-    // ---- end instrumentation ----
+    CNetBuf ( const bool bNIsSim = false ) : iSequenceNumberAtGetPos ( 0 ), bIsSimulation ( bNIsSim ), bIsInitialized ( false ) {}
 
     void Init ( const int iNewBlockSize, const int iNewNumBlocks, const bool bNUseSequenceNumber, const bool bPreserve = false );
 
@@ -311,16 +267,6 @@ protected:
     bool                      bIsInitialized;
 
     static constexpr int iNumBytesSeqNum = 1; // per definition 1 byte sequence counter
-
-    // ---- #2979 arm 6 FLEETOCC occupancy census ----
-    // Sample one in every iOccCensusEvery calls to Get(), so the O(iNumBlocksMemory)
-    // scan costs about one array element per call amortised.
-    static constexpr int  iOccCensusEvery = 32;
-    int                   iOccSinceBin;
-    std::atomic<uint32_t> iOccSamples;
-    std::atomic<uint32_t> iOccSkipped;
-    std::atomic<uint32_t> aOccHist[MAX_NET_BUF_SIZE_NUM_BL + 1];
-    // ---- end instrumentation ----
 };
 
 // Network buffer (jitter buffer) with statistic calculations ------------------

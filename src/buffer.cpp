@@ -108,14 +108,6 @@ void CNetBuf::Init ( const int iNewBlockSize, const int iNewNumBlocks, const boo
 
     // set initialized flag
     bIsInitialized = true;
-
-    // ---- #2979 arm 6 FLEETOCC occupancy census ----
-    // A server reuses channel objects across clients, and Init() is where a channel
-    // is (re)configured -- on connect and on every buffer resize.  Resetting here is
-    // what keeps each census tied to exactly one client at exactly one configured
-    // size; the reader detects the reset because the cumulative sample count drops.
-    ResetOccCensus();
-    // ---- end instrumentation ----
 }
 
 void CNetBuf::Resize ( const int iNewNumBlocks, const int iNewBlockSize )
@@ -313,45 +305,6 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
 
 bool CNetBuf::Get ( CVector<uint8_t>& vecbyData, const int iOutSize )
 {
-    // ---- #2979 arm 6 FLEETOCC occupancy census (print only, no behaviour change) ----
-    // Counted on entry, before this Get consumes a block, so the value is comparable
-    // with the rig arms.  Only the sequence-number path maintains veciBlockValid --
-    // CNetBuf::Put treats the two cases as "a complete different way" -- so a
-    // non-sequence-number channel is counted as skipped rather than measured wrong.
-    if ( !bIsSimulation && bIsInitialized )
-    {
-        if ( ++iOccSinceBin >= iOccCensusEvery )
-        {
-            iOccSinceBin = 0;
-
-            if ( bUseSequenceNumber )
-            {
-                int iOccNow = 0;
-
-                for ( int iOccIdx = 0; iOccIdx < iNumBlocksMemory; iOccIdx++ )
-                {
-                    if ( veciBlockValid[iOccIdx] > 0 )
-                    {
-                        iOccNow++;
-                    }
-                }
-
-                if ( iOccNow > MAX_NET_BUF_SIZE_NUM_BL )
-                {
-                    iOccNow = MAX_NET_BUF_SIZE_NUM_BL;
-                }
-
-                aOccHist[iOccNow].fetch_add ( 1, std::memory_order_relaxed );
-                iOccSamples.fetch_add ( 1, std::memory_order_relaxed );
-            }
-            else
-            {
-                iOccSkipped.fetch_add ( 1, std::memory_order_relaxed );
-            }
-        }
-    }
-    // ---- end instrumentation ----
-
     bool bReturn = true;
 
     // check requested output size and available buffer data

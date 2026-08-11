@@ -116,13 +116,6 @@ public:
     bool SetSockBufNumFrames ( const int iNewNumFrames, const bool bPreserve = false );
     int  GetSockBufNumFrames() const { return iCurSockBufNumFrames; }
 
-    // ---- #2979 arm 6 FLEETOCC occupancy census (print only) ----
-    void GetOccCensus ( uint32_t& iNumSamples, uint32_t& iNumSkipped, uint32_t aHist[] ) const
-    {
-        SockBuf.GetOccCensus ( iNumSamples, iNumSkipped, aHist );
-    }
-    // ---- end instrumentation ----
-
     void UpdateSocketBufferSize();
 
     int GetUploadRateKbps();
