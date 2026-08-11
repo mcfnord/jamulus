@@ -66,6 +66,26 @@
 // 37 reserved for PROTMESSID_CONCEAL_RATE (PLAN-ADAPTIVE-PLC.md Step 4)
 #define PROTMESSID_PLC_AB_TELEMETRY         38 // TEST-ONLY (plc-ab-tester): A/B field-trial counters
 
+// TEST-ONLY (plc-ab-tester): payload of PROTMESSID_PLC_AB_TELEMETRY.
+// All counters are cumulative since connect, so a report lost beyond the
+// protocol's resend-until-ACK still costs nothing - the next one carries the
+// totals. Wire format is fixed at 30 bytes, version tag first.
+struct CPlcAbTelemetry
+{
+    uint32_t iSeq;             // telemetry message counter
+    uint32_t iUptimeSecs;      // seconds since the client started audio
+    int      iPlcActive;       // OPUS_SET_PACKET_LOSS_PERC currently commanded
+    int      iSegmentIdx;      // A/B segment counter (parity = which arm)
+    int      iCodecType;       // EAudComprType of the connection
+    int      iNumAudioChans;   // decoded channel count
+    int      iJitBufBlocks;    // client's local jitter-buffer setting
+    bool     bAutoJitBuf;      // auto jitter buffer active
+    uint32_t iConcealFailsCum; // downlink blocks the buffer could not supply
+    uint32_t iBlocksCum;       // downlink blocks requested (denominator)
+    uint32_t iClipCum;         // full-scale samples in the decoded output
+    int      iConcealPctWin;   // current ~2 s window percentage, -1 = none yet
+};
+
 // message IDs of connection less messages (CLM)
 // DEFINITION -> start at 1000, end at 1999, see IsConnectionLessMessageID
 #define PROTMESSID_CLM_PING_MS                1001 // for measuring ping time
@@ -124,6 +144,7 @@ public:
     void CreateChanInfoMes ( const CChannelCoreInfo ChanInfo );
     void CreateReqChanInfoMes();
     void CreateChatTextMes ( const QString strChatText );
+    void CreatePlcAbTelemetryMes ( const CPlcAbTelemetry& Tlm ); // TEST-ONLY (plc-ab-tester)
     void CreateNetwTranspPropsMes ( const CNetworkTransportProps& NetTrProps );
     void CreateReqNetwTranspPropsMes();
     void CreateReqSplitMessSupportMes();

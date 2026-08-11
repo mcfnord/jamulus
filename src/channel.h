@@ -150,6 +150,13 @@ public:
         iConcealFailsCum.store ( 0, std::memory_order_relaxed );
         iConcealBlocksCum.store ( 0, std::memory_order_relaxed );
     }
+    void CreatePlcAbTelemetryMes ( const CPlcAbTelemetry& Tlm ) // TEST-ONLY (plc-ab-tester)
+    {
+        if ( ProtocolIsEnabled() )
+        {
+            Protocol.CreatePlcAbTelemetryMes ( Tlm );
+        }
+    }
     int           GetNumAudioChannels() const { return iNumAudioChannels; }
 
     // network protocol interface

@@ -1551,6 +1551,30 @@ bool CProtocol::EvaluateRawAudioSupportedMes()
 // 30 bytes fixed: ver(1) seq(4) uptime(4) plc(1) seg(2) codec(1) nch(1)
 // jbuf(2) auto(1) fails(4) blocks(4) clip(4) win(1). Receiver only on the
 // fleet build - the sending side lives in the tester client branch.
+// TEST-ONLY (plc-ab-tester): 30-byte fixed wire format, version tag first
+void CProtocol::CreatePlcAbTelemetryMes ( const CPlcAbTelemetry& Tlm )
+{
+    CVector<uint8_t> vecData ( 30 );
+    int              iPos = 0; // init position pointer
+
+    PutValOnStream ( vecData, iPos, 1, 1 ); // wire format version
+    PutValOnStream ( vecData, iPos, Tlm.iSeq, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iUptimeSecs, 4 );
+    PutValOnStream ( vecData, iPos, static_cast<uint32_t> ( Tlm.iPlcActive ), 1 );
+    PutValOnStream ( vecData, iPos, static_cast<uint32_t> ( Tlm.iSegmentIdx ), 2 );
+    PutValOnStream ( vecData, iPos, static_cast<uint32_t> ( Tlm.iCodecType ), 1 );
+    PutValOnStream ( vecData, iPos, static_cast<uint32_t> ( Tlm.iNumAudioChans ), 1 );
+    PutValOnStream ( vecData, iPos, static_cast<uint32_t> ( Tlm.iJitBufBlocks ), 2 );
+    PutValOnStream ( vecData, iPos, static_cast<uint32_t> ( Tlm.bAutoJitBuf ? 1 : 0 ), 1 );
+    PutValOnStream ( vecData, iPos, Tlm.iConcealFailsCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iBlocksCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iClipCum, 4 );
+    // -1 (no complete window yet) travels as 255
+    PutValOnStream ( vecData, iPos, static_cast<uint32_t> ( Tlm.iConcealPctWin < 0 ? 255 : Tlm.iConcealPctWin ), 1 );
+
+    CreateAndSendMessage ( PROTMESSID_PLC_AB_TELEMETRY, vecData );
+}
+
 bool CProtocol::EvaluatePlcAbTelemetryMes ( const CVector<uint8_t>& vecData )
 {
     int iPos = 0; // init position pointer
