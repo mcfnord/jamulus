@@ -439,9 +439,18 @@ protected:
     // Arms cycled in order, one per JAM_AB_SECS segment. Index 0 is the arm a
     // session starts in, and it is 35 deliberately: that is the value shipped
     // code uses, so a session opens in stock behaviour before deviating.
-    // Override with JAM_AB_ARMS="35,0,70"; JAM_AB_LO / JAM_AB_HI still work and
+    //
+    // The third arm is 5, not a value above 35: offline, loss_perc saturates
+    // well below 35, so 70 scores within 0.03 dB of 35 in every quality/loss
+    // cell and cannot produce a signal to find. 5 is the knee -- it captures
+    // most of the robustness while giving back the clean-line fidelity 35
+    // spends, and it crosses over with 35 near 5% loss, which is the arm pair
+    // that actually tests whether adapting the value is worth anything.
+    // Measured: scratchpad/plcloss.c, DISCOVERIES 2026-08-11.
+    //
+    // Override with JAM_AB_ARMS="35,0,5"; JAM_AB_LO / JAM_AB_HI still work and
     // build a two-arm cycle for anything that already scripts them.
-    QVector<int>          vecPlcAbArms { 35, 0, 70 };
+    QVector<int>          vecPlcAbArms { 35, 0, 5 };
 
     QString strPlcAbArms() const
     {

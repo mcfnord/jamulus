@@ -1,7 +1,7 @@
 ### 3.12.1-BETTER-WIFI-TEST-00 ###
 
 - Field-trial build. Cycles the Opus packet-loss-resilience setting through
-  35 / 0 / 70 while connected, a few seconds per arm, so one player's own
+  35 / 0 / 5 while connected, a few seconds per arm, so one player's own
   connection supplies all three arms under identical network conditions.
   Aimed at 2.4 GHz Wi-Fi, where loss is bursty enough for the setting to matter.
 
