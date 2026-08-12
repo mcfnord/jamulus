@@ -320,6 +320,7 @@ protected:
     // kept off the audio thread entirely - GetData() only writes an atomic
     QTimer ConcealTelemetryTimer;
     int    aiLastLoggedConcealPct[MAX_NUM_CHANNELS];
+    int    aiLastLoggedSeqLossPct[MAX_NUM_CHANNELS]; // §65: wire loss beside the concealment figure
     QTimer              TimerCapacityLog;
 
     // server list

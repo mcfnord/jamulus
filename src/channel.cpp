@@ -683,6 +683,21 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
                 iMeasuredConcealPct.store ( ( iConcealFailCount * 100 + iConcealWindowLen / 2 ) / iConcealWindowLen,
                                             std::memory_order_relaxed );
 
+                // wire-loss over the same window (OPEN-TEST-PLANS.md §65). The
+                // concealment figure above says a block was missing; these two
+                // say whether the sender actually sent it. By construction the
+                // span is exactly received + lost, so no separate span counter.
+                const uint32_t iSeqRecvWin = SockBuf.GetSeqRecvCount();
+                const uint32_t iSeqLossWin = SockBuf.GetSeqLossCount();
+                const uint32_t iSeqSpanWin = iSeqRecvWin + iSeqLossWin;
+
+                iMeasuredSeqRecv.store ( iSeqRecvWin, std::memory_order_relaxed );
+                iMeasuredSeqLossPct.store ( ( iSeqSpanWin > 0 )
+                                                ? static_cast<int> ( ( iSeqLossWin * 100 + iSeqSpanWin / 2 ) / iSeqSpanWin )
+                                                : -1, // nothing arrived at all: a rate would be a fiction
+                                            std::memory_order_relaxed );
+                SockBuf.ResetSeqStats();
+
                 iConcealWindowCount = 0;
                 iConcealFailCount   = 0;
             }

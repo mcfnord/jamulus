@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <atomic>
 #include "util.h"
 #include "global.h"
 
@@ -244,6 +245,37 @@ public:
     virtual bool Put ( const CVector<uint8_t>& vecbyData, int iInSize );
     virtual bool Get ( CVector<uint8_t>& vecbyData, const int iOutSize );
 
+    // Wire-loss statistics (PLAN-ADAPTIVE-PLC.md, OPEN-TEST-PLANS.md §65) -----
+    //
+    // The concealment counter in CChannel cannot say WHY a block was missing.
+    // A client that stopped sending, a link dropping packets, and a packet that
+    // merely arrives late all reach CChannel::GetData as GS_BUFFER_UNDERRUN, so
+    // all three read as concealment: a SIGSTOPped client over a loopback link
+    // with zero packet loss reads 100% (rig-plc/silent-client.sh, 2026-08-11).
+    //
+    // The sequence number does separate them, because the SENDER writes it: a
+    // client that is not sending advances nothing at all, a lossy link leaves
+    // gaps that stay open, and a late packet arrives and closes its own gap.
+    // Counted here because this is the only place the received sequence byte
+    // exists -- it is stripped before the audio data reaches the channel.
+    //
+    // Loss is (span - received) maintained incrementally against the RUNNING
+    // MAXIMUM, which makes a late arrival self-correcting: it raises the
+    // received count without raising the span, so it cancels the gap it had
+    // previously opened instead of booking as loss. Measured against netem's
+    // own drop counter on the wire: 4.93% vs 4.97% offered (runs/SEQ-up5).
+    uint32_t GetSeqRecvCount() const { return iSeqRecv.load ( std::memory_order_relaxed ); }
+    uint32_t GetSeqLossCount() const { return iSeqLoss.load ( std::memory_order_relaxed ); }
+    uint32_t GetSeqReorderCount() const { return iSeqReorder.load ( std::memory_order_relaxed ); }
+
+    void ResetSeqStats()
+    {
+        bSeqStatValid = false;
+        iSeqRecv.store ( 0, std::memory_order_relaxed );
+        iSeqLoss.store ( 0, std::memory_order_relaxed );
+        iSeqReorder.store ( 0, std::memory_order_relaxed );
+    }
+
 protected:
     enum EBufState
     {
@@ -267,6 +299,17 @@ protected:
     bool                      bUseSequenceNumber;
     bool                      bIsSimulation;
     bool                      bIsInitialized;
+
+    // wire-loss statistics; see the accessors above for why these live here.
+    // Written on the network thread, read off-thread by the telemetry timer,
+    // hence atomic -- matching iConcealFailsCum in CChannel.
+    bool                  bSeqStatValid = false; // false until the first packet of a window
+    uint8_t               iSeqStatPrev  = 0;     // last received sequence byte, for unwrapping
+    int                   iSeqStatCur   = 0;     // unwrapped position of that last received packet
+    int                   iSeqStatMax   = 0;     // running maximum, which is what the span is measured to
+    std::atomic<uint32_t> iSeqRecv { 0 };
+    std::atomic<uint32_t> iSeqLoss { 0 };
+    std::atomic<uint32_t> iSeqReorder { 0 };
 
     static constexpr int iNumBytesSeqNum = 1; // per definition 1 byte sequence counter
 };

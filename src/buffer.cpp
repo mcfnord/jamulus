@@ -158,6 +158,61 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
             // the sequence number is appended after the coded audio data)
             const int iCurrentSequenceNumber = vecbyData[iBlockOffset + iBlockSize];
 
+            // wire-loss statistics (buffer.h, OPEN-TEST-PLANS.md §65). Done here,
+            // before any of the window-shifting below, so what is counted is the
+            // stream as the sender emitted it rather than as the buffer chose to
+            // reconcile it.
+            {
+                const uint8_t iSeqByte = static_cast<uint8_t> ( iCurrentSequenceNumber );
+
+                if ( !bSeqStatValid )
+                {
+                    bSeqStatValid = true;
+                    iSeqStatCur   = 0;
+                    iSeqStatMax   = 0;
+                }
+                else
+                {
+                    // unwrap against the previously received byte, the same
+                    // +-128 nearest-representative rule the buffer window uses
+                    int iStep = static_cast<int> ( iSeqByte ) - static_cast<int> ( iSeqStatPrev );
+
+                    if ( iStep < -128 )
+                    {
+                        iStep += 256;
+                    }
+                    else if ( iStep >= 128 )
+                    {
+                        iStep -= 256;
+                    }
+
+                    const int iCur = iSeqStatCur + iStep;
+                    iSeqStatCur    = iCur;
+
+                    if ( iCur > iSeqStatMax )
+                    {
+                        // the span grew: everything skipped over is missing so far
+                        iSeqLoss.fetch_add ( iCur - iSeqStatMax - 1, std::memory_order_relaxed );
+                        iSeqStatMax = iCur;
+                    }
+                    else
+                    {
+                        // a late or reordered packet: it closes a gap that was
+                        // already booked as loss, so give that one back
+                        iSeqReorder.fetch_add ( 1, std::memory_order_relaxed );
+
+                        uint32_t iPrevLoss = iSeqLoss.load ( std::memory_order_relaxed );
+
+                        while ( iPrevLoss > 0 && !iSeqLoss.compare_exchange_weak ( iPrevLoss, iPrevLoss - 1, std::memory_order_relaxed ) )
+                        {
+                        }
+                    }
+                }
+
+                iSeqStatPrev = iSeqByte;
+                iSeqRecv.fetch_add ( 1, std::memory_order_relaxed );
+            }
+
             // calculate the sequence number difference and take care of wrap
             int iSeqNumDiff = iCurrentSequenceNumber - static_cast<int> ( iSequenceNumberAtGetPos );
 

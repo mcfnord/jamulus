@@ -142,6 +142,14 @@ public:
     // concealment-rate measurement (PLAN-ADAPTIVE-PLC.md): -1 = no complete window yet
     int GetMeasuredConcealPct() const { return iMeasuredConcealPct.load ( std::memory_order_relaxed ); }
     int GetConcealWindowLen() const { return iConcealWindowLen; }
+    // wire loss over the same window (OPEN-TEST-PLANS.md §65). Concealment alone
+    // cannot tell a lossy link from a client that stopped sending or one whose
+    // packets merely arrive late -- all three underrun the buffer. These two
+    // separate them: iMeasuredSeqRecv == 0 is a channel that sent nothing, and
+    // a low loss percentage under high concealment is lateness, not loss.
+    // -1 = no complete window yet, or nothing received in the window.
+    int GetMeasuredSeqLossPct() const { return iMeasuredSeqLossPct.load ( std::memory_order_relaxed ); }
+    int GetMeasuredSeqRecv() const { return iMeasuredSeqRecv.load ( std::memory_order_relaxed ); }
     // TEST-ONLY (plc-ab-tester): cumulative-since-connect counterparts
     uint32_t GetConcealFailsCum() const { return iConcealFailsCum.load ( std::memory_order_relaxed ); }
     uint32_t GetConcealBlocksCum() const { return iConcealBlocksCum.load ( std::memory_order_relaxed ); }
@@ -209,6 +217,9 @@ protected:
         iConcealWindowCount = 0;
         iConcealFailCount   = 0;
         iMeasuredConcealPct.store ( -1, std::memory_order_relaxed );
+        iMeasuredSeqLossPct.store ( -1, std::memory_order_relaxed );
+        iMeasuredSeqRecv.store ( 0, std::memory_order_relaxed );
+        SockBuf.ResetSeqStats();
         ResetConcealCumCounters();
     }
 
@@ -257,6 +268,8 @@ protected:
     int              iConcealWindowCount = 0;                     // blocks seen in the current window
     int              iConcealFailCount   = 0;                     // of those, blocks the buffer could not supply
     std::atomic<int> iMeasuredConcealPct { -1 };                  // -1 = no complete window yet
+    std::atomic<int> iMeasuredSeqLossPct { -1 };                  // §65: wire loss over the same window
+    std::atomic<int> iMeasuredSeqRecv { 0 };                      // §65: packets that actually arrived in it
     // TEST-ONLY (plc-ab-tester): cumulative counterparts, read off-thread by telemetry
     std::atomic<uint32_t> iConcealFailsCum { 0 };
     std::atomic<uint32_t> iConcealBlocksCum { 0 };
