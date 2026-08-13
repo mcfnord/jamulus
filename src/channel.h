@@ -97,6 +97,24 @@ public:
 
     EGetDataStat GetData ( CVector<uint8_t>& vecbyData, const int iNumBytes );
 
+    // first sample per channel of the raw frame following a gap; false if it has
+    // not arrived. Only meaningful directly after a GetData() which did not
+    // return GS_BUFFER_OK.
+    bool PeekNextRawSamples ( int16_t* psOut, const int iNumCh );
+
+    // last raw sample per channel handed to the mixer, so that a concealed frame
+    // starting at offset 0 has a left endpoint to interpolate from
+    void GetLastRawSamples ( int16_t* psOut ) const
+    {
+        psOut[0] = sLastRawSample[0];
+        psOut[1] = sLastRawSample[1];
+    }
+    void SetLastRawSamples ( const int16_t* psIn )
+    {
+        sLastRawSample[0] = psIn[0];
+        sLastRawSample[1] = psIn[1];
+    }
+
     void PrepAndSendPacket ( CHighPrioSocket* pSocket, const CVector<uint8_t>& vecbyNPacket, const int iNPacketLen );
 
     void ResetTimeOutCounter() { iConTimeOut = iConTimeOutStartVal; }
@@ -225,6 +243,11 @@ protected:
     bool             bDoAutoSockBufSize;
     bool             bUseSequenceNumber;
     uint8_t          iSendSequenceNumber;
+
+    // last raw PCM sample per channel emitted for this client (packet loss
+    // concealment endpoint; zero is the correct initial value because that is
+    // what the stream is before any audio arrives)
+    int16_t sLastRawSample[2] = { 0, 0 };
 
     // network output conversion buffer
     CConvBuf<uint8_t> ConvBuf;

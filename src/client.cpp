@@ -1598,8 +1598,45 @@ void CClient::ProcessAudioDataIntern ( CVector<int16_t>& vecsStereoSndCrd )
             }
             else
             {
-                // missing audio - fill with silence
-                memset ( &vecsStereoSndCrd[j], 0, iCeltNumCodedBytes );
+                // Lost raw packet. Same straight line as on the server: the frame
+                // after the gap is already in the jitter buffer unless it has not
+                // arrived, in which case this falls back to silence.
+                const int iNumCh      = 2; // the sound card buffer is always stereo here
+                const int iNumSamples = iCeltNumCodedBytes / ( static_cast<int> ( sizeof ( int16_t ) ) * iNumCh );
+
+                int16_t sTo[2] = { 0, 0 };
+
+                if ( ( iNumSamples > 0 ) && Channel.PeekNextRawSamples ( sTo, iNumCh ) )
+                {
+                    int16_t sFrom[2] = { 0, 0 };
+
+                    if ( j >= iNumCh )
+                    {
+                        sFrom[0] = vecsStereoSndCrd[j - iNumCh];
+                        sFrom[1] = vecsStereoSndCrd[j - iNumCh + 1];
+                    }
+                    else
+                    {
+                        Channel.GetLastRawSamples ( sFrom );
+                    }
+
+                    RawAudioInterpolate ( &vecsStereoSndCrd[j], iNumSamples, iNumCh, sFrom, sTo );
+                }
+                else
+                {
+                    memset ( &vecsStereoSndCrd[j], 0, iCeltNumCodedBytes );
+                }
+            }
+
+            {
+                // left endpoint for a gap starting at the beginning of the next call
+                const int iLast = j + iCeltNumCodedBytes / static_cast<int> ( sizeof ( int16_t ) ) - 2;
+
+                if ( iLast >= 0 )
+                {
+                    const int16_t sLast[2] = { vecsStereoSndCrd[iLast], vecsStereoSndCrd[iLast + 1] };
+                    Channel.SetLastRawSamples ( sLast );
+                }
             }
         }
     }

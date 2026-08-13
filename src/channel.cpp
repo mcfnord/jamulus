@@ -622,6 +622,27 @@ EPutDataStat CChannel::PutAudioData ( const CVector<uint8_t>& vecbyData, const i
     return eRet;
 }
 
+bool CChannel::PeekNextRawSamples ( int16_t* psOut, const int iNumCh )
+{
+    bool bOk = false;
+
+    MutexSocketBuf.lock();
+    {
+        const uint8_t* pbyData = nullptr;
+
+        if ( SockBuf.PeekNextValid ( pbyData ) )
+        {
+            // raw PCM travels as native-endian int16_t (the receive path is a
+            // plain memcpy), so it is read back the same way
+            memcpy ( psOut, pbyData, iNumCh * sizeof ( int16_t ) );
+            bOk = true;
+        }
+    }
+    MutexSocketBuf.unlock();
+
+    return bOk;
+}
+
 EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumBytes )
 {
     EGetDataStat eGetStatus;

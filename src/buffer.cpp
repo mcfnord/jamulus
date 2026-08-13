@@ -322,6 +322,25 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
     return true;
 }
 
+bool CNetBuf::PeekNextValid ( const uint8_t*& pbyData ) const
+{
+    // the simulation buffer holds no payload at all, and without sequence numbers
+    // there is no per-block validity to test
+    if ( !bIsInitialized || !bUseSequenceNumber || bIsSimulation )
+    {
+        return false;
+    }
+
+    if ( veciBlockValid[iBlockGetPos] <= 0 )
+    {
+        return false;
+    }
+
+    pbyData = &vecvecMemory[iBlockGetPos][0];
+
+    return true;
+}
+
 bool CNetBuf::Get ( CVector<uint8_t>& vecbyData, const int iOutSize )
 {
     bool bReturn = true;

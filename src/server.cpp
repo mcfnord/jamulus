@@ -997,8 +997,50 @@ void CServer::DecodeReceiveData ( const int iChanCnt, const int iNumClients )
             }
             else
             {
-                // lost packet - fill with silence
-                memset ( &vecvecsData[iChanCnt][iOffset], 0, iCeltNumCodedBytes );
+                // Lost raw packet. Interpolate from the last sample emitted to the
+                // first sample of the frame after the gap when that frame is
+                // already in the jitter buffer; otherwise fall back to silence.
+                const int iNumCh      = vecNumAudioChannels[iChanCnt];
+                const int iNumSamples = iCeltNumCodedBytes / ( static_cast<int> ( sizeof ( int16_t ) ) * iNumCh );
+
+                int16_t sTo[2] = { 0, 0 };
+
+                if ( ( iNumSamples > 0 ) && vecChannels[iCurChanID].PeekNextRawSamples ( sTo, iNumCh ) )
+                {
+                    int16_t sFrom[2] = { 0, 0 };
+
+                    if ( iOffset >= iNumCh )
+                    {
+                        // the previous frame of this same call is right here
+                        sFrom[0] = vecvecsData[iChanCnt][iOffset - iNumCh];
+                        sFrom[1] = vecvecsData[iChanCnt][iOffset - iNumCh + ( iNumCh - 1 )];
+                    }
+                    else
+                    {
+                        // first frame of the call: use what the previous call left
+                        vecChannels[iCurChanID].GetLastRawSamples ( sFrom );
+                    }
+
+                    RawAudioInterpolate ( &vecvecsData[iChanCnt][iOffset], iNumSamples, iNumCh, sFrom, sTo );
+                }
+                else
+                {
+                    memset ( &vecvecsData[iChanCnt][iOffset], 0, iCeltNumCodedBytes );
+                }
+            }
+
+            // remember the last raw sample of this frame as the left endpoint for
+            // a gap that starts at the beginning of the next call
+            if ( bIsRawAudio )
+            {
+                const int iNumCh = vecNumAudioChannels[iChanCnt];
+                const int iLast  = iOffset + iCeltNumCodedBytes / static_cast<int> ( sizeof ( int16_t ) ) - iNumCh;
+
+                if ( iLast >= 0 )
+                {
+                    const int16_t sLast[2] = { vecvecsData[iChanCnt][iLast], vecvecsData[iChanCnt][iLast + ( iNumCh - 1 )] };
+                    vecChannels[iCurChanID].SetLastRawSamples ( sLast );
+                }
             }
         }
 

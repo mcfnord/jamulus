@@ -1371,6 +1371,34 @@ signals:
 #endif
 
 /******************************************************************************\
+* Raw audio packet loss concealment                                            *
+\******************************************************************************/
+// Fill one lost raw-PCM frame with a straight line from the last sample that was
+// emitted to the first sample of the frame following the gap. Both endpoints are
+// already known at the call site, so this adds no delay to the audio path.
+//
+// psFrame     points at the lost frame, interleaved, iNumCh channels
+// iNumSamples number of sample FRAMES to write (not individual samples)
+// psFrom      last emitted sample per channel (iNumCh values)
+// psTo        first sample per channel of the frame after the gap (iNumCh values)
+inline void RawAudioInterpolate ( int16_t* psFrame, const int iNumSamples, const int iNumCh, const int16_t* psFrom, const int16_t* psTo )
+{
+    for ( int iCh = 0; iCh < iNumCh; iCh++ )
+    {
+        const int iFrom = psFrom[iCh];
+        const int iTo   = psTo[iCh];
+
+        for ( int i = 0; i < iNumSamples; i++ )
+        {
+            // (i + 1) so that the ramp starts one step away from the last emitted
+            // sample and lands exactly on psTo one step after the frame ends --
+            // the frame is the interior of the segment, not its endpoints
+            psFrame[i * iNumCh + iCh] = static_cast<int16_t> ( iFrom + ( ( iTo - iFrom ) * ( i + 1 ) ) / ( iNumSamples + 1 ) );
+        }
+    }
+}
+
+/******************************************************************************\
 * Statistics                                                                   *
 \******************************************************************************/
 // Error rate measurement ------------------------------------------------------

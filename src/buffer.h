@@ -264,6 +264,13 @@ public:
     virtual bool Put ( const CVector<uint8_t>& vecbyData, int iInSize );
     virtual bool Get ( CVector<uint8_t>& vecbyData, const int iOutSize );
 
+    // Non-consuming look at the block the NEXT Get() will return, i.e. the frame
+    // that follows a gap when this is called right after a failed Get(). Returns
+    // false when that frame has not arrived, which is always the case when
+    // sequence numbers are not in use (there a failed Get() means the buffer ran
+    // dry, so there is nothing behind the gap to look at).
+    bool PeekNextValid ( const uint8_t*& pbyData ) const;
+
 protected:
     enum EBufState
     {
