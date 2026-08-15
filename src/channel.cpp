@@ -643,11 +643,6 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
 
                 // reset network transport properties
                 ResetNetworkTransportProperties();
-
-                // discard any buffered frames so a reused channel slot cannot leak
-                // the previous occupant's audio into the next connection / recording
-                SockBuf.SetUseDoubleSystemFrameSize ( eAudioCompressionType == CT_OPUS ); // NOTE must be set BEFORE the init()
-                SockBuf.Init ( iCeltNumCodedBytes, iCurSockBufNumFrames, bUseSequenceNumber );
             }
             else
             {
