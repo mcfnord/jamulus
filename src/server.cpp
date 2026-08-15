@@ -929,6 +929,20 @@ void CServer::DecodeReceiveData ( const int iChanCnt, const int iNumClients )
     else
     {
         CurOpusDecoder = nullptr;
+
+        // No decoder means the compression type is CT_NONE, which is the state a
+        // channel is left in by ResetNetworkTransportProperties() on disconnect and
+        // stays in until the next occupant negotiates transport properties. Nothing
+        // writes vecvecsData in that window (the OPUS branch is skipped for want of a
+        // decoder, and bIsRawAudio is false because iCeltNumCodedBytes is the reset
+        // CELT_MINIMUM_NUM_BYTES), so the buffer would still hold the PREVIOUS
+        // occupant's decoded audio - which is then mixed and handed to the recorder as
+        // the new client's own. Contribute silence instead.
+        //
+        // Zero the whole worst-case buffer, not iClientFrameSizeSamples worth: that
+        // variable is still 0 here, and consumers read numAudioChannels *
+        // iServerFrameSizeSamples, which is a different and larger extent.
+        memset ( &vecvecsData[iChanCnt][0], 0, vecvecsData[iChanCnt].Size() * sizeof ( int16_t ) );
     }
 
     // get gains of all connected channels
