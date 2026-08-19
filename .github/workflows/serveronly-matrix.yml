@@ -14,7 +14,12 @@
 #   linux   -> PASS (this is the configuration the deb package already builds)
 #   macos   -> FAIL at link, on CSoundBase symbols
 #   windows -> PASS (its ASIO sources sit inside the else-branch of its own test)
-# A Windows FAIL falsifies the "win32 does not hit this" sentence in #3914.
+# A Windows FAIL falsifies the "win32 does not hit this" sentence in #3914 --
+# but only a failure of the PROJECT. Run 32273507277 failed on Windows for a rig
+# reason and had to be discarded: `shell: bash` on a Windows runner puts
+# Git-Bash's /usr/bin/link (GNU coreutils) ahead of MSVC's link.exe, so nmake
+# invoked the wrong linker ("/usr/bin/link: extra operand '/NXCOMPAT'") after
+# every object had compiled cleanly. The Windows steps therefore run in pwsh.
 
 name:                             serveronly build matrix
 
@@ -40,16 +45,19 @@ jobs:
             qt_host:              linux
             qt_arch:              ''
             build:                'make -j2'
+            windows:              false
           - label:                macos-intel
             os:                   macos-13
             qt_host:              mac
             qt_arch:              clang_64
             build:                'make -j2'
+            windows:              false
           - label:                windows
             os:                   windows-2022
             qt_host:              windows
             qt_arch:              win64_msvc2019_64
             build:                'nmake'
+            windows:              true
 
     steps:
       - name:                     Check out
@@ -72,13 +80,36 @@ jobs:
         with:
           arch:                   x64
 
-      - name:                     qmake CONFIG+=serveronly CONFIG+=headless
+      - name:                     qmake, unix
+        if:                       ${{ !matrix.windows }}
         shell:                    bash
         run:                      qmake Jamulus.pro CONFIG+=serveronly CONFIG+=headless 2>&1 | tee qmake-${{ matrix.label }}.log
 
-      - name:                     Build
+      - name:                     Build, unix
+        if:                       ${{ !matrix.windows }}
         shell:                    bash
         run:                      ${{ matrix.build }} 2>&1 | tee build-${{ matrix.label }}.log
+
+      # pwsh, not bash: see the note at the top of this file. MSVC's link.exe
+      # must win over Git-Bash's /usr/bin/link.
+      - name:                     qmake, windows
+        if:                       ${{ matrix.windows }}
+        shell:                    pwsh
+        run:                      |
+          where.exe link
+          qmake Jamulus.pro CONFIG+=serveronly CONFIG+=headless > qmake-${{ matrix.label }}.log 2>&1
+          $rc = $LASTEXITCODE
+          Get-Content qmake-${{ matrix.label }}.log
+          exit $rc
+
+      - name:                     Build, windows
+        if:                       ${{ matrix.windows }}
+        shell:                    pwsh
+        run:                      |
+          nmake > build-${{ matrix.label }}.log 2>&1
+          $rc = $LASTEXITCODE
+          Get-Content build-${{ matrix.label }}.log -Tail 80
+          exit $rc
 
       - name:                     Collect logs
         if:                       always()
