@@ -1,0 +1,91 @@
+# FORK-ONLY EXPERIMENT — not intended for upstream.
+#
+# Question: does `CONFIG+=serveronly` build on each platform?
+#
+# Upstream CI passes that option on exactly one path: linux/debian/rules runs
+# `qmake "CONFIG+=headless serveronly"` for the jamulus-headless package, reached
+# on every deb build. Nothing under .github/, mac/ or windows/ passes it, so the
+# macx and win32 serveronly code has never been built by CI.
+# jamulussoftware/jamulus#3914 reports the macOS failure, measured by hand on a
+# Mac mini (macOS 12.7.6, Qt 5.15.2). This matrix reproduces it on a clean runner
+# and answers the same question for Windows, which is still untested.
+#
+# Expected, if #3914's reading of the .pro file is right:
+#   linux   -> PASS (this is the configuration the deb package already builds)
+#   macos   -> FAIL at link, on CSoundBase symbols
+#   windows -> PASS (its ASIO sources sit inside the else-branch of its own test)
+# A Windows FAIL falsifies the "win32 does not hit this" sentence in #3914.
+
+name:                             serveronly build matrix
+
+# Deliberately NOT an 'autobuild**' branch name: that pattern also triggers the
+# project's own autobuild.yml (every platform, CodeQL, signing), which is minutes
+# of runner time this question does not need.
+on:
+  push:
+    branches:
+      - 'serveronly-matrix'
+  workflow_dispatch:
+
+jobs:
+  serveronly:
+    name:                         ${{ matrix.label }}
+    runs-on:                      ${{ matrix.os }}
+    strategy:
+      fail-fast:                  false
+      matrix:
+        include:
+          - label:                linux-control
+            os:                   ubuntu-22.04
+            qt_host:              linux
+            qt_arch:              ''
+            build:                'make -j2'
+          - label:                macos-intel
+            os:                   macos-13
+            qt_host:              mac
+            qt_arch:              clang_64
+            build:                'make -j2'
+          - label:                windows
+            os:                   windows-2022
+            qt_host:              windows
+            qt_arch:              win64_msvc2019_64
+            build:                'nmake'
+
+    steps:
+      - name:                     Check out
+        uses:                     actions/checkout@v4
+
+      - name:                     Linux build prerequisites
+        if:                       matrix.qt_host == 'linux'
+        run:                      sudo apt-get update -qq && sudo apt-get install -qq -y libgl1-mesa-dev
+
+      - name:                     Install Qt 5.15.2
+        uses:                     jurplel/install-qt-action@v4
+        with:
+          version:                '5.15.2'
+          host:                   ${{ matrix.qt_host }}
+          arch:                   ${{ matrix.qt_arch }}
+
+      - name:                     Set up MSVC
+        if:                       matrix.qt_host == 'windows'
+        uses:                     ilammy/msvc-dev-cmd@v1
+        with:
+          arch:                   x64
+
+      - name:                     qmake CONFIG+=serveronly CONFIG+=headless
+        shell:                    bash
+        run:                      qmake Jamulus.pro CONFIG+=serveronly CONFIG+=headless 2>&1 | tee qmake-${{ matrix.label }}.log
+
+      - name:                     Build
+        shell:                    bash
+        run:                      ${{ matrix.build }} 2>&1 | tee build-${{ matrix.label }}.log
+
+      - name:                     Collect logs
+        if:                       always()
+        uses:                     actions/upload-artifact@v4
+        with:
+          name:                   serveronly-${{ matrix.label }}
+          path:                   |
+            qmake-*.log
+            build-*.log
+          if-no-files-found:      warn
