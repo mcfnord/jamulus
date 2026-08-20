@@ -706,6 +706,37 @@ void CServer::OnTimerCapacityLog()
 
 void CServer::OnTimer()
 {
+    // Telemetry v2 group D: the audio tick's own lateness. Without this, a server that is late
+    // looks EXACTLY like every client degrading at once -- and that is also the evidence behind
+    // any future "other players here are not affected" claim. §77p/q measured that the audio tick
+    // occupies the main thread's event loop, so this is the term that goes wrong first.
+    {
+        const double dExpectedMs = ( 1000.0 * ( bUseDoubleSystemFrameSize ? DOUBLE_SYSTEM_FRAME_SIZE_SAMPLES : SYSTEM_FRAME_SIZE_SAMPLES ) ) /
+                                   SYSTEM_SAMPLE_RATE_HZ;
+
+        if ( !TickTimer.isValid() )
+        {
+            TickTimer.start();
+        }
+        else
+        {
+            const qint64 iNowNs  = TickTimer.nsecsElapsed();
+            const double dGapMs  = ( iNowNs - iLastTickNs ) / 1e6;
+            const double dLateMs = dGapMs - dExpectedMs;
+            iLastTickNs          = iNowNs;
+            iTelemV2Ticks++;
+
+            if ( dLateMs > 1.0 )
+            {
+                iTelemV2TicksLate1ms++;
+            }
+            if ( dLateMs > iTelemV2TickMaxLateUs / 1000.0 )
+            {
+                iTelemV2TickMaxLateUs = static_cast<qint64> ( dLateMs * 1000.0 );
+            }
+        }
+    }
+
     //### TEST: BEGIN ###//
     // uncomment next line to do a timer Jitter measurement
     // static CTimingMeas JitterMeas ( 1000, "test2.dat" ); JitterMeas.Measure();
@@ -796,6 +827,14 @@ void CServer::OnTimer()
 
             // update socket buffer size
             vecChannels[iCurChanID].UpdateSocketBufferSize();
+
+            // telemetry v2 group C: record whether this channel actually had signal. Concealment
+            // during silence is not a defect anyone hears, and §105b's production data could not
+            // separate the two -- which made every rate in it ambiguous.
+            if ( bSendChannelLevels )
+            {
+                vecChannels[iCurChanID].NoteLevel ( vecChannelLevels[iChanCnt] );
+            }
 
             // send channel levels if they are ready
             if ( bSendChannelLevels )
@@ -1727,8 +1766,15 @@ void CServer::WriteTelemetryV2()
 
         // Every value below is CUMULATIVE since the channel connected. Difference two samples for
         // an exact total over any interval -- no window semantics, nothing lost between reports.
+        QString strHist;
+        for ( int b = 0; b < CChannel::iNumArrivalBuckets; b++ )
+        {
+            strHist += ( b ? "," : "" ) + QString::number ( vecChannels[iChanID].GetArrivalBucket ( b ) );
+        }
+
         out << QString ( "t2 %1 ch=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runs=%8 runsum=%9 runge32=%10 runmax=%11 "
-                         "drag=%12/%13 jbuf=%14 auto=%15 coded=%16 chans=%17 conn=%18 hw=%19\n" )
+                         "drag=%12/%13 jbuf=%14 auto=%15 coded=%16 chans=%17 conn=%18 hw=%19 "
+                         "gap=%20 aud=%21/%22 peak=%23 fmtchg=%24 tick=%25/%26/%27\n" )
                    .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
                    .arg ( iChanID )
                    .arg ( vecChannels[iChanID].GetCumConcealFails() )
@@ -1747,7 +1793,15 @@ void CServer::WriteTelemetryV2()
                    .arg ( vecChannels[iChanID].GetCeltNumCodedBytes() )
                    .arg ( vecChannels[iChanID].GetNumAudioChannels() )
                    .arg ( iConnected )
-                   .arg ( iTelemV2HighWater );
+                   .arg ( iTelemV2HighWater )
+                   .arg ( strHist )                                          // gap= arrival histogram, 8 buckets
+                   .arg ( vecChannels[iChanID].GetCumAudibleWindows() )      // aud= audible / measured windows
+                   .arg ( vecChannels[iChanID].GetCumLevelWindows() )
+                   .arg ( vecChannels[iChanID].GetPeakLevel() )
+                   .arg ( vecChannels[iChanID].GetFormatChanges() )
+                   .arg ( iTelemV2Ticks )                                    // tick= ticks/late>1ms/maxlate_us
+                   .arg ( iTelemV2TicksLate1ms )
+                   .arg ( iTelemV2TickMaxLateUs );
     }
 
     f.close();

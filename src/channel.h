@@ -164,6 +164,36 @@ public:
     uint32_t GetCumRunMax() const { return iCumRunMax.load ( std::memory_order_relaxed ); }
     uint32_t GetCumDragBack() const { return iCumDragBack.load ( std::memory_order_relaxed ); }
     uint32_t GetCumDragFwd() const { return iCumDragFwd.load ( std::memory_order_relaxed ); }
+
+    // Telemetry v2 group B: ARRIVAL-GAP HISTOGRAM, 8 buckets, in units of the nominal frame
+    // period. This is what lets a depth curve be rebuilt for a real player -- §85 produced one
+    // for a single radio in this house and it is the most informative artefact the rig made.
+    //
+    // Read the buckets as the shape §84c analysed: bucket 0 is a back-to-back arrival (the
+    // release half of a stall-and-drain), bucket 1 is on time, and 5..7 are stalls of growing
+    // size. NOTE this is an INTER-ARRIVAL gap distribution, not depthcurve.py's "lateness above
+    // the median arrival" -- they answer related questions and are not the same number.
+    uint32_t GetArrivalBucket ( const int i ) const { return aiArrivalHist[i].load ( std::memory_order_relaxed ); }
+    // group C: was anyone actually playing? Concealment during silence is not a defect anyone hears
+    uint32_t GetCumAudibleWindows() const { return iCumAudibleWindows.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumLevelWindows() const { return iCumLevelWindows.load ( std::memory_order_relaxed ); }
+    uint32_t GetPeakLevel() const { return iPeakLevel.load ( std::memory_order_relaxed ); }
+    void     NoteLevel ( const uint16_t iLevel )
+    {
+        iCumLevelWindows.fetch_add ( 1, std::memory_order_relaxed );
+        if ( iLevel > 0 )
+        {
+            iCumAudibleWindows.fetch_add ( 1, std::memory_order_relaxed );
+        }
+        uint32_t iPrev = iPeakLevel.load ( std::memory_order_relaxed );
+        while ( iLevel > iPrev && !iPeakLevel.compare_exchange_weak ( iPrev, iLevel, std::memory_order_relaxed ) )
+        {
+        }
+    }
+    // group E: did the client change audio format mid-session?
+    uint32_t GetFormatChanges() const { return iFormatChanges.load ( std::memory_order_relaxed ); }
+
+    static constexpr int iNumArrivalBuckets = 8;
     bool     GetAutoSockBufSize() const { return bDoAutoSockBufSize; }
     // TEST-ONLY (plc-ab-tester): cumulative-since-connect counterparts
     uint32_t GetConcealFailsCum() const { return iConcealFailsCum.load ( std::memory_order_relaxed ); }
@@ -265,6 +295,14 @@ protected:
     std::atomic<uint32_t> iCumRunMax { 0 };
     std::atomic<uint32_t> iCumDragBack { 0 };
     std::atomic<uint32_t> iCumDragFwd { 0 };
+    std::atomic<uint32_t> aiArrivalHist[8] {};
+    std::atomic<uint32_t> iCumAudibleWindows { 0 };
+    std::atomic<uint32_t> iCumLevelWindows { 0 };
+    std::atomic<uint32_t> iPeakLevel { 0 };
+    std::atomic<uint32_t> iFormatChanges { 0 };
+    qint64                iLastArrivalNs = 0; // socket thread only
+    int                   iPrevCodedBytesForTelem = 0;
+    QElapsedTimer         ArrivalTimer;
     bool             bUseSequenceNumber;
     uint8_t          iSendSequenceNumber;
 

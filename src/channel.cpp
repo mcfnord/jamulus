@@ -442,6 +442,14 @@ void CChannel::OnNetTranspPropsReceived ( CNetworkTransportProps NetworkTranspor
                 iCeltNumCodedBytes = iNetwFrameSize;
             }
 
+            // telemetry v2 group E: a client changing audio format mid-session is a real event
+            // and it invalidates any per-session average that spans it
+            if ( iPrevCodedBytesForTelem != 0 && iPrevCodedBytesForTelem != iCeltNumCodedBytes )
+            {
+                iFormatChanges.fetch_add ( 1, std::memory_order_relaxed );
+            }
+            iPrevCodedBytesForTelem = iCeltNumCodedBytes;
+
             // update maximum number of frames for fade in counter (only needed for server)
             // and audio frame size
             if ( eAudioCompressionType == CT_OPUS )
@@ -555,6 +563,54 @@ EPutDataStat CChannel::PutAudioData ( const CVector<uint8_t>& vecbyData, const i
     // - the channel is enabled
     if ( ( bIsServer || ( GetAddress() == RecHostAddr ) ) && IsEnabled() )
     {
+        // Telemetry v2 group B: bucket the inter-arrival gap in units of the nominal frame
+        // period. One clock read per packet on the socket thread -- a vDSO call, ~20 ns, which
+        // does not block (convention 8 is about blocking, and this cannot).
+        if ( bIsServer && ( iAudioFrameSizeSamples > 0 ) )
+        {
+            if ( !ArrivalTimer.isValid() )
+            {
+                ArrivalTimer.start();
+                iLastArrivalNs = 0;
+            }
+            else
+            {
+                const qint64 iNowNs   = ArrivalTimer.nsecsElapsed();
+                const qint64 iGapNs   = iNowNs - iLastArrivalNs;
+                iLastArrivalNs        = iNowNs;
+                // The denominator is the PACKET period, not the audio-frame period. A client
+                // using iNetwFrameSizeFact > 1 bundles that many audio frames into one UDP
+                // packet, so its packets arrive every fact*frame periods. Dividing by the frame
+                // period alone put every such client in the "1.5-2.5" bucket and left the
+                // on-time bucket nearly empty -- caught immediately by the first real histogram
+                // (gjstress at fact=2 read gap=...,294,10442,... where 294 was supposed to be
+                // the mode).
+                const int    iFact    = ( iNetwFrameSizeFact > 0 ) ? iNetwFrameSizeFact : 1;
+                const double dFrameNs = ( 1e9 * iAudioFrameSizeSamples * iFact ) / SYSTEM_SAMPLE_RATE_HZ;
+                const double dGap     = ( dFrameNs > 0 ) ? ( iGapNs / dFrameNs ) : 0.0;
+
+                int iBucket;
+                if ( dGap < 0.5 )
+                    iBucket = 0; // back-to-back: the release half of a stall-and-drain
+                else if ( dGap < 1.5 )
+                    iBucket = 1; // on time
+                else if ( dGap < 2.5 )
+                    iBucket = 2;
+                else if ( dGap < 4.5 )
+                    iBucket = 3;
+                else if ( dGap < 8.5 )
+                    iBucket = 4;
+                else if ( dGap < 16.5 )
+                    iBucket = 5;
+                else if ( dGap < 32.5 )
+                    iBucket = 6;
+                else
+                    iBucket = 7; // long stall
+
+                aiArrivalHist[iBucket].fetch_add ( 1, std::memory_order_relaxed );
+            }
+        }
+
         MutexSocketBuf.lock();
         {
             // only process audio if packet has correct size

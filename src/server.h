@@ -330,6 +330,11 @@ protected:
     qint64   iTelemV2CapBytes    = 0; // decided once at startup from actual free space
     bool     bTelemV2Suspended   = false;
     int      iTelemV2HighWater   = 0;
+    QElapsedTimer TickTimer;
+    qint64   iLastTickNs         = 0;
+    quint64  iTelemV2Ticks       = 0;
+    quint64  iTelemV2TicksLate1ms = 0;
+    qint64   iTelemV2TickMaxLateUs = 0;
     QString  strTelemV2Path;
     int    aiLastLoggedSeqLossPct[MAX_NUM_CHANNELS]; // §65: wire loss beside the concealment figure
     QTimer              TimerCapacityLog;
