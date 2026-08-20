@@ -150,6 +150,21 @@ public:
     // -1 = no complete window yet, or nothing received in the window.
     int GetMeasuredSeqLossPct() const { return iMeasuredSeqLossPct.load ( std::memory_order_relaxed ); }
     int GetMeasuredSeqRecv() const { return iMeasuredSeqRecv.load ( std::memory_order_relaxed ); }
+
+    // Telemetry v2 (§105c) -- cumulative, never reset. Difference two samples for an exact total
+    // over any interval; no window semantics, nothing lost between reports.
+    uint32_t GetCumConcealFails() const { return iCumConcealFails.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumConcealBlocks() const { return iCumConcealBlocks.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumSeqLost() const { return iCumSeqLost.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumSeqSpan() const { return iCumSeqSpan.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumSeqReorder() const { return iCumSeqReorder.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumRuns() const { return iCumRuns.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumRunSum() const { return iCumRunSum.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumRunsGE32() const { return iCumRunsGE32.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumRunMax() const { return iCumRunMax.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumDragBack() const { return iCumDragBack.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumDragFwd() const { return iCumDragFwd.load ( std::memory_order_relaxed ); }
+    bool     GetAutoSockBufSize() const { return bDoAutoSockBufSize; }
     // TEST-ONLY (plc-ab-tester): cumulative-since-connect counterparts
     uint32_t GetConcealFailsCum() const { return iConcealFailsCum.load ( std::memory_order_relaxed ); }
     uint32_t GetConcealBlocksCum() const { return iConcealBlocksCum.load ( std::memory_order_relaxed ); }
@@ -237,6 +252,19 @@ protected:
     CNetBufWithStats SockBuf;
     int              iCurSockBufNumFrames;
     bool             bDoAutoSockBufSize;
+
+    // telemetry v2 cumulative counters -- see the getters above
+    std::atomic<uint32_t> iCumConcealFails { 0 };
+    std::atomic<uint32_t> iCumConcealBlocks { 0 };
+    std::atomic<uint32_t> iCumSeqLost { 0 };
+    std::atomic<uint32_t> iCumSeqSpan { 0 };
+    std::atomic<uint32_t> iCumSeqReorder { 0 };
+    std::atomic<uint32_t> iCumRuns { 0 };
+    std::atomic<uint32_t> iCumRunSum { 0 };
+    std::atomic<uint32_t> iCumRunsGE32 { 0 };
+    std::atomic<uint32_t> iCumRunMax { 0 };
+    std::atomic<uint32_t> iCumDragBack { 0 };
+    std::atomic<uint32_t> iCumDragFwd { 0 };
     bool             bUseSequenceNumber;
     uint8_t          iSendSequenceNumber;
 

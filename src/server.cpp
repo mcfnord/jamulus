@@ -23,6 +23,9 @@
 \******************************************************************************/
 
 #include "server.h"
+#include <QStorageInfo>
+#include <QFileInfo>
+#include <QTextStream>
 #include "centraldefense.h"
 #include "chatreporter.h"
 
@@ -264,6 +267,23 @@ CServer::CServer ( const int          iNewMaxNumChan,
     QObject::connect ( &HighPrecisionTimer, &CHighPrecisionTimer::timeout, this, &CServer::OnTimer );
 
     // concealment-rate telemetry: plain main-thread poll, ~1 s (PLAN-ADAPTIVE-PLC.md Step 1d)
+    // Telemetry v2 setup. Path is overridable so a test rig does not need /var/log; if the file
+    // cannot be opened the writer simply never writes, which is the safe failure.
+    strTelemV2Path = qEnvironmentVariableIsSet ( "JAMULUS_TELEMETRY_PATH" ) ? qEnvironmentVariable ( "JAMULUS_TELEMETRY_PATH" )
+                                                                           : QString ( "/var/log/jamulus-telemetry-v2.log" );
+    {
+        // Cap = min(200 MB, 5% of the filesystem's free space), decided once from what is actually
+        // there rather than assumed. On a host with 200 MB free a fixed 200 MB cap would fill it.
+        QStorageInfo si ( QFileInfo ( strTelemV2Path ).absolutePath() );
+        const qint64 iFree    = si.isValid() ? si.bytesAvailable() : 0;
+        const qint64 iFivePct = iFree / 20;
+        iTelemV2CapBytes      = qMin ( static_cast<qint64> ( 200LL * 1024 * 1024 ), iFivePct > 0 ? iFivePct : ( 8LL * 1024 * 1024 ) );
+        qInfo() << qUtf8Printable ( QString ( "telemetry-v2: path %1, cap %2 MB (filesystem free %3 MB)" )
+                                        .arg ( strTelemV2Path )
+                                        .arg ( iTelemV2CapBytes / ( 1024 * 1024 ) )
+                                        .arg ( iFree / ( 1024 * 1024 ) ) );
+    }
+
     ConcealTelemetryTimer.setInterval ( 1000 );
     QObject::connect ( &ConcealTelemetryTimer, &QTimer::timeout, this, &CServer::OnConcealTelemetryTimer );
 
@@ -1625,8 +1645,124 @@ void CServer::FreeChannel ( const int iCurChanID )
     qWarning() << "FreeChannel() called with invalid channel ID";
 }
 
+// Telemetry v2 disk guard. TWO independent conditions, either of which suspends writing:
+// the file has reached this server's cap, or the filesystem itself is nearly full. A fixed cap
+// would be wrong -- measured 2026-08-20, free space across reachable fleet hosts ranged 2 088 to
+// 7 988 MB and most of the fleet could not be surveyed at all, so the cap is derived from what is
+// actually there. Telemetry must never be the reason an audio server fills its disk.
+bool CServer::TelemetryV2SpaceOk()
+{
+    QFileInfo fi ( strTelemV2Path );
+
+    if ( fi.exists() && fi.size() >= iTelemV2CapBytes )
+    {
+        return false;
+    }
+
+    QStorageInfo si ( QFileInfo ( strTelemV2Path ).absolutePath() );
+
+    if ( si.isValid() && si.bytesAvailable() < ( 500LL * 1024 * 1024 ) )
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void CServer::WriteTelemetryV2()
+{
+    if ( strTelemV2Path.isEmpty() )
+    {
+        return;
+    }
+
+    if ( !TelemetryV2SpaceOk() )
+    {
+        if ( !bTelemV2Suspended )
+        {
+            // say it exactly once, then stay silent: a suspension that logs every tick is its own
+            // disk problem
+            bTelemV2Suspended = true;
+            qInfo() << "telemetry-v2: SUSPENDED (cap reached or filesystem low); no further records";
+        }
+        return;
+    }
+
+    if ( bTelemV2Suspended )
+    {
+        bTelemV2Suspended = false;
+        qInfo() << "telemetry-v2: resumed";
+    }
+
+    int iConnected = 0;
+
+    for ( int i = 0; i < iMaxNumChannels; i++ )
+    {
+        if ( vecChannels[i].IsConnected() )
+        {
+            iConnected++;
+        }
+    }
+
+    if ( iConnected > iTelemV2HighWater )
+    {
+        iTelemV2HighWater = iConnected;
+    }
+
+    QFile f ( strTelemV2Path );
+
+    if ( !f.open ( QIODevice::Append | QIODevice::Text ) )
+    {
+        return;
+    }
+
+    QTextStream out ( &f );
+
+    for ( int iChanID = 0; iChanID < iMaxNumChannels; iChanID++ )
+    {
+        if ( !vecChannels[iChanID].IsConnected() )
+        {
+            continue;
+        }
+
+        // Every value below is CUMULATIVE since the channel connected. Difference two samples for
+        // an exact total over any interval -- no window semantics, nothing lost between reports.
+        out << QString ( "t2 %1 ch=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runs=%8 runsum=%9 runge32=%10 runmax=%11 "
+                         "drag=%12/%13 jbuf=%14 auto=%15 coded=%16 chans=%17 conn=%18 hw=%19\n" )
+                   .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
+                   .arg ( iChanID )
+                   .arg ( vecChannels[iChanID].GetCumConcealFails() )
+                   .arg ( vecChannels[iChanID].GetCumConcealBlocks() )
+                   .arg ( vecChannels[iChanID].GetCumSeqLost() )
+                   .arg ( vecChannels[iChanID].GetCumSeqSpan() )
+                   .arg ( vecChannels[iChanID].GetCumSeqReorder() )
+                   .arg ( vecChannels[iChanID].GetCumRuns() )
+                   .arg ( vecChannels[iChanID].GetCumRunSum() )
+                   .arg ( vecChannels[iChanID].GetCumRunsGE32() )
+                   .arg ( vecChannels[iChanID].GetCumRunMax() )
+                   .arg ( vecChannels[iChanID].GetCumDragBack() )
+                   .arg ( vecChannels[iChanID].GetCumDragFwd() )
+                   .arg ( vecChannels[iChanID].GetSockBufNumFrames() )
+                   .arg ( vecChannels[iChanID].GetAutoSockBufSize() ? 1 : 0 )
+                   .arg ( vecChannels[iChanID].GetCeltNumCodedBytes() )
+                   .arg ( vecChannels[iChanID].GetNumAudioChannels() )
+                   .arg ( iConnected )
+                   .arg ( iTelemV2HighWater );
+    }
+
+    f.close();
+}
+
 void CServer::OnConcealTelemetryTimer()
 {
+    // telemetry v2 fires every 30th tick (the timer is 1 s); cumulative counters mean a slower
+    // cadence costs nothing but resolution, and it cuts log volume ~15x against the 2 s window
+    if ( ++iTelemV2TickCount >= 30 )
+    {
+        iTelemV2TickCount = 0;
+        WriteTelemetryV2();
+    }
+
     // Bounded: at most iMaxNumChannels relaxed atomic loads per second; logs only
     // on change, and the value changes at most once per ~2 s window per channel.
     for ( int iChanID = 0; iChanID < iMaxNumChannels; iChanID++ )

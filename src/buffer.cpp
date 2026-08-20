@@ -239,6 +239,8 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
             // buffer which did not use any sequence number at all.
             if ( iSeqNumDiff < 0 )
             {
+                iDragBack.fetch_add ( 1, std::memory_order_relaxed ); // telemetry v2
+
                 // the received packet comes too late so we shift the "buffer window" to the past
                 // until the received packet is the very first packet in the buffer
                 for ( int i = iSeqNumDiff; i < 0; i++ )
@@ -261,6 +263,8 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
             }
             else if ( iSeqNumDiff >= iNumBlocksMemory )
             {
+                iDragFwd.fetch_add ( 1, std::memory_order_relaxed ); // telemetry v2
+
                 // the received packet comes too early so we move the "buffer window" in the
                 // future until the received packet is the last packet in the buffer
                 for ( int i = 0; i < iSeqNumDiff - iNumBlocksMemory + 1; i++ )
@@ -403,6 +407,37 @@ bool CNetBuf::Get ( CVector<uint8_t>& vecbyData, const int iOutSize )
     else
     {
         eBufState = BS_OK;
+    }
+
+    // Telemetry v2: consecutive-concealment run length. A failed Get extends the current run; a
+    // successful one closes it. Independent loss reads a mean run of exactly 1.0, an ordered
+    // stall-and-drain reads tens -- which is the whole discriminator (OPEN-TEST-PLANS.md §105c).
+    // Simulation buffers are excluded: CNetBufWithStats runs ten of them per channel and their
+    // Get failures are hypothetical, not audio anyone lost.
+    if ( !bIsSimulation )
+    {
+        if ( bReturn )
+        {
+            if ( iRunCur > 0 )
+            {
+                const uint32_t iRun = static_cast<uint32_t> ( iRunCur );
+                iRuns.fetch_add ( 1, std::memory_order_relaxed );
+                iRunSum.fetch_add ( iRun, std::memory_order_relaxed );
+                if ( iRun >= 32 )
+                {
+                    iRunsGE32.fetch_add ( 1, std::memory_order_relaxed );
+                }
+                uint32_t iPrevMax = iRunMax.load ( std::memory_order_relaxed );
+                while ( iRun > iPrevMax && !iRunMax.compare_exchange_weak ( iPrevMax, iRun, std::memory_order_relaxed ) )
+                {
+                }
+                iRunCur = 0;
+            }
+        }
+        else
+        {
+            iRunCur++;
+        }
     }
 
     return bReturn;

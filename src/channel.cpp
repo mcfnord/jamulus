@@ -696,6 +696,31 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
                                                 ? static_cast<int> ( ( iSeqLossWin * 100 + iSeqSpanWin / 2 ) / iSeqSpanWin )
                                                 : -1, // nothing arrived at all: a rate would be a fiction
                                             std::memory_order_relaxed );
+                // Telemetry v2 (§105c): CUMULATIVE raw counters, never reset. The percent fields
+                // above keep §65's per-window semantics; these accumulate so a consumer sampling
+                // at any cadence can difference two samples and lose nothing in between. That is
+                // the whole reason §105b could not answer its question -- a rounded per-window
+                // rate cannot be reconstructed, and 96.17% of real windows read "0 percent"
+                // because 4 losses in 750 are needed before the quotient reaches 1.
+                iCumConcealFails.fetch_add ( static_cast<uint32_t> ( iConcealFailCount ), std::memory_order_relaxed );
+                iCumConcealBlocks.fetch_add ( static_cast<uint32_t> ( iConcealWindowLen ), std::memory_order_relaxed );
+                iCumSeqLost.fetch_add ( iSeqLossWin, std::memory_order_relaxed );
+                iCumSeqSpan.fetch_add ( iSeqSpanWin, std::memory_order_relaxed );
+                iCumSeqReorder.fetch_add ( SockBuf.GetSeqReorderCount(), std::memory_order_relaxed );
+                iCumRuns.fetch_add ( SockBuf.GetRunCount(), std::memory_order_relaxed );
+                iCumRunSum.fetch_add ( SockBuf.GetRunSum(), std::memory_order_relaxed );
+                iCumRunsGE32.fetch_add ( SockBuf.GetRunsGE32(), std::memory_order_relaxed );
+                iCumDragBack.fetch_add ( SockBuf.GetDragBackCount(), std::memory_order_relaxed );
+                iCumDragFwd.fetch_add ( SockBuf.GetDragFwdCount(), std::memory_order_relaxed );
+                {
+                    // run_max is a maximum, not a sum: keep the largest ever seen on this channel
+                    const uint32_t iWinMax = SockBuf.GetRunMax();
+                    uint32_t       iPrev   = iCumRunMax.load ( std::memory_order_relaxed );
+                    while ( iWinMax > iPrev && !iCumRunMax.compare_exchange_weak ( iPrev, iWinMax, std::memory_order_relaxed ) )
+                    {
+                    }
+                }
+                SockBuf.ResetRunStats();
                 SockBuf.ResetSeqStats();
 
                 iConcealWindowCount = 0;

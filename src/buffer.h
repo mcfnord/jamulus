@@ -276,6 +276,40 @@ public:
         iSeqReorder.store ( 0, std::memory_order_relaxed );
     }
 
+    // Telemetry v2 (OPEN-TEST-PLANS.md §105c). Two families of counter, both written on the hot
+    // paths and read by CServer's telemetry timer, so both are relaxed atomics like the seq stats
+    // above -- nothing here orders anything.
+    //
+    // 1. CONSECUTIVE-CONCEALMENT RUN LENGTH, accumulated in Get(). This is the discriminator that
+    //    separates the failure regimes: independent loss reads a mean run of exactly 1.0, while an
+    //    ordered stall-and-drain reads tens. Cost measured at +4.1 ns per Get on bare-metal ARM
+    //    against a 1 us gate (DISCOVERIES 2026-08-19, §105a).
+    //    NOTE the name: a long run means "ordered stall-and-drain", NOT "block-ack". That
+    //    attribution was withdrawn 2026-08-20 after the same signature appeared with aggregation
+    //    disabled; see the §102e sweep entry.
+    // 2. WINDOW-DRAG BRANCH COUNTS, accumulated in Put(). buffer.cpp's own comment concedes the
+    //    window drag "throws away valid packets"; §104 measured on 26 traces that it is
+    //    nonetheless the cheaper option. These two counters test that on real traffic.
+    uint32_t GetRunCount() const { return iRuns.load ( std::memory_order_relaxed ); }
+    uint32_t GetRunSum() const { return iRunSum.load ( std::memory_order_relaxed ); }
+    uint32_t GetRunsGE32() const { return iRunsGE32.load ( std::memory_order_relaxed ); }
+    uint32_t GetRunMax() const { return iRunMax.load ( std::memory_order_relaxed ); }
+    uint32_t GetDragBackCount() const { return iDragBack.load ( std::memory_order_relaxed ); }
+    uint32_t GetDragFwdCount() const { return iDragFwd.load ( std::memory_order_relaxed ); }
+
+    void ResetRunStats()
+    {
+        // iRunCur is deliberately NOT reset: a run in progress spans the window boundary and
+        // zeroing it here would split one stall into two short ones, which is precisely the
+        // distinction the counter exists to make.
+        iRuns.store ( 0, std::memory_order_relaxed );
+        iRunSum.store ( 0, std::memory_order_relaxed );
+        iRunsGE32.store ( 0, std::memory_order_relaxed );
+        iRunMax.store ( 0, std::memory_order_relaxed );
+        iDragBack.store ( 0, std::memory_order_relaxed );
+        iDragFwd.store ( 0, std::memory_order_relaxed );
+    }
+
 protected:
     enum EBufState
     {
@@ -296,6 +330,15 @@ protected:
     int                       iBlockSize;
     uint8_t                   iSequenceNumberAtGetPos; // uint8_t so that it wraps automatically
     EBufState                 eBufState;
+    // telemetry v2 counters -- see the getters above
+    int                   iRunCur = 0; // touched only in Get(), i.e. one thread: no atomic needed
+    std::atomic<uint32_t> iRuns { 0 };
+    std::atomic<uint32_t> iRunSum { 0 };
+    std::atomic<uint32_t> iRunsGE32 { 0 };
+    std::atomic<uint32_t> iRunMax { 0 };
+    std::atomic<uint32_t> iDragBack { 0 };
+    std::atomic<uint32_t> iDragFwd { 0 };
+
     bool                      bUseSequenceNumber;
     bool                      bIsSimulation;
     bool                      bIsInitialized;

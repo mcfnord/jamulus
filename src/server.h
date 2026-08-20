@@ -320,6 +320,17 @@ protected:
     // kept off the audio thread entirely - GetData() only writes an atomic
     QTimer ConcealTelemetryTimer;
     int    aiLastLoggedConcealPct[MAX_NUM_CHANNELS];
+
+    // Telemetry v2 (OPEN-TEST-PLANS.md §105c): a per-channel record every 30 s to a dedicated
+    // file, with a disk cap this server enforces itself. It writes RAW counts, never quotients --
+    // §105b failed precisely because a rounded per-window rate cannot be reconstructed.
+    void     WriteTelemetryV2();
+    bool     TelemetryV2SpaceOk();
+    int      iTelemV2TickCount   = 0;
+    qint64   iTelemV2CapBytes    = 0; // decided once at startup from actual free space
+    bool     bTelemV2Suspended   = false;
+    int      iTelemV2HighWater   = 0;
+    QString  strTelemV2Path;
     int    aiLastLoggedSeqLossPct[MAX_NUM_CHANNELS]; // §65: wire loss beside the concealment figure
     QTimer              TimerCapacityLog;
 
