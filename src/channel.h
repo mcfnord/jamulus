@@ -193,6 +193,47 @@ public:
     // group E: did the client change audio format mid-session?
     uint32_t GetFormatChanges() const { return iFormatChanges.load ( std::memory_order_relaxed ); }
 
+    // Session serial for this channel SLOT, bumped by ResetTelemetryV2 on every new occupant.
+    // Slot indices are reused, so ch= alone splices players; (ch, sess) segments them exactly,
+    // including a reuse inside one emit interval where fresh-from-zero deltas alone are ambiguous.
+    uint32_t GetTelemSession() const { return iTelemSession.load ( std::memory_order_relaxed ); }
+
+    // Called from CServer::InitChannel for EVERY new occupant of this slot -- without it the
+    // cumulative counters continue from the previous occupant and the "cumulative since the
+    // channel connected" contract does not hold. Runs on the socket thread before the occupant's
+    // first Put, but takes MutexSocketBuf anyway so the netbuf reset cannot race a straggling
+    // Get/Put touching the old occupant's state.
+    void ResetTelemetryV2()
+    {
+        iTelemSession.fetch_add ( 1, std::memory_order_relaxed );
+        iCumConcealFails.store ( 0, std::memory_order_relaxed );
+        iCumConcealBlocks.store ( 0, std::memory_order_relaxed );
+        iCumSeqLost.store ( 0, std::memory_order_relaxed );
+        iCumSeqSpan.store ( 0, std::memory_order_relaxed );
+        iCumSeqReorder.store ( 0, std::memory_order_relaxed );
+        iCumRuns.store ( 0, std::memory_order_relaxed );
+        iCumRunSum.store ( 0, std::memory_order_relaxed );
+        iCumRunsGE32.store ( 0, std::memory_order_relaxed );
+        iCumRunMax.store ( 0, std::memory_order_relaxed );
+        iCumDragBack.store ( 0, std::memory_order_relaxed );
+        iCumDragFwd.store ( 0, std::memory_order_relaxed );
+        for ( int i = 0; i < iNumArrivalBuckets; i++ )
+        {
+            aiArrivalHist[i].store ( 0, std::memory_order_relaxed );
+        }
+        iCumAudibleWindows.store ( 0, std::memory_order_relaxed );
+        iCumLevelWindows.store ( 0, std::memory_order_relaxed );
+        iPeakLevel.store ( 0, std::memory_order_relaxed );
+        iFormatChanges.store ( 0, std::memory_order_relaxed );
+        iPrevCodedBytesForTelem = 0;
+        iLastArrivalNs          = 0;
+        ArrivalTimer.invalidate(); // first gap of the new session must not span the vacancy
+
+        MutexSocketBuf.lock();
+        SockBuf.ResetTelemetryForNewConnection();
+        MutexSocketBuf.unlock();
+    }
+
     static constexpr int iNumArrivalBuckets = 8;
     bool     GetAutoSockBufSize() const { return bDoAutoSockBufSize; }
     // TEST-ONLY (plc-ab-tester): cumulative-since-connect counterparts
@@ -300,6 +341,8 @@ protected:
     std::atomic<uint32_t> iCumLevelWindows { 0 };
     std::atomic<uint32_t> iPeakLevel { 0 };
     std::atomic<uint32_t> iFormatChanges { 0 };
+    std::atomic<uint32_t> iTelemSession { 0 }; // bumped per new occupant; see ResetTelemetryV2
+
     qint64                iLastArrivalNs = 0; // socket thread only
     int                   iPrevCodedBytesForTelem = 0;
     QElapsedTimer         ArrivalTimer;

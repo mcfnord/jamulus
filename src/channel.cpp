@@ -564,8 +564,9 @@ EPutDataStat CChannel::PutAudioData ( const CVector<uint8_t>& vecbyData, const i
     if ( ( bIsServer || ( GetAddress() == RecHostAddr ) ) && IsEnabled() )
     {
         // Telemetry v2 group B: bucket the inter-arrival gap in units of the nominal frame
-        // period. One clock read per packet on the socket thread -- a vDSO call, ~20 ns, which
-        // does not block (convention 8 is about blocking, and this cannot).
+        // period. One clock read per packet on the socket thread -- measured 64.07 ns for the
+        // QElapsedTimer read, 68.6 ns for the whole block (median of 9 interleaved reps,
+        // TELEMETRY.md) -- and it does not block (convention 8 is about blocking, and this cannot).
         if ( bIsServer && ( iAudioFrameSizeSamples > 0 ) )
         {
             if ( !ArrivalTimer.isValid() )

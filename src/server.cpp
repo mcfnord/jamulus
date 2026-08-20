@@ -268,9 +268,16 @@ CServer::CServer ( const int          iNewMaxNumChan,
 
     // concealment-rate telemetry: plain main-thread poll, ~1 s (PLAN-ADAPTIVE-PLC.md Step 1d)
     // Telemetry v2 setup. Path is overridable so a test rig does not need /var/log; if the file
-    // cannot be opened the writer simply never writes, which is the safe failure.
-    strTelemV2Path = qEnvironmentVariableIsSet ( "JAMULUS_TELEMETRY_PATH" ) ? qEnvironmentVariable ( "JAMULUS_TELEMETRY_PATH" )
-                                                                           : QString ( "/var/log/jamulus-telemetry-v2.log" );
+    // cannot be opened the writer simply never writes, which is the safe failure. The default
+    // carries the UDP port because fleet hosts run up to SEVEN server processes each
+    // (fleet.json, checked 2026-08-20) -- a shared path would interleave their ch= lines
+    // indistinguishably. The directory is /var/log/jamulus/ rather than /var/log because the
+    // service runs as User=jamulus, which cannot create files in /var/log (root:syslog 755,
+    // verified on a live fleet host 2026-08-20); deploy.sh creates the directory with service
+    // ownership.
+    strTelemV2Path = qEnvironmentVariableIsSet ( "JAMULUS_TELEMETRY_PATH" )
+                         ? qEnvironmentVariable ( "JAMULUS_TELEMETRY_PATH" )
+                         : QString ( "/var/log/jamulus/telemetry-v2-%1.log" ).arg ( iPortNumber );
     {
         // Cap = min(200 MB, 5% of the filesystem's free space), decided once from what is actually
         // there rather than assumed. On a host with 200 MB free a fixed 200 MB cap would fill it.
@@ -282,6 +289,21 @@ CServer::CServer ( const int          iNewMaxNumChan,
                                         .arg ( strTelemV2Path )
                                         .arg ( iTelemV2CapBytes / ( 1024 * 1024 ) )
                                         .arg ( iFree / ( 1024 * 1024 ) ) );
+
+        // Probe the path once at startup: an unwritable path otherwise fails silently forever.
+        // Real failure mode, not theoretical -- the fleet service runs as User=jamulus, which
+        // cannot create files in /var/log itself (root:syslog 755, verified 2026-08-20).
+        QFile TelemProbe ( strTelemV2Path );
+        if ( TelemProbe.open ( QIODevice::Append | QIODevice::Text ) )
+        {
+            TelemProbe.close();
+        }
+        else
+        {
+            qWarning() << qUtf8Printable ( QString ( "telemetry-v2: CANNOT WRITE %1 (%2) -- no telemetry will be recorded" )
+                                               .arg ( strTelemV2Path )
+                                               .arg ( TelemProbe.errorString() ) );
+        }
     }
 
     ConcealTelemetryTimer.setInterval ( 1000 );
@@ -666,6 +688,11 @@ void CServer::Stop()
     {
         // stop timer
         HighPrecisionTimer.Stop();
+
+        // telemetry v2: the tick-lateness gauge must not span the idle period -- without this,
+        // the first tick after an idle stretch measures the whole stretch as one late tick and
+        // pins the max forever (measured: a 15 s idle read as tick max 15 011 162 us)
+        TickTimer.invalidate();
 
         // stop concealment-rate telemetry poll
         ConcealTelemetryTimer.stop();
@@ -1637,6 +1664,11 @@ void CServer::InitChannel ( const int iNewChanID, const CHostAddress& InetAddr )
     // reset channel info
     vecChannels[iNewChanID].ResetInfo();
 
+    // telemetry v2: new occupant, new session. Slot indices are reused, so without this the
+    // cumulative counters continue from the previous occupant and two players splice into one
+    // apparent session; the bumped sess= serial marks the boundary explicitly.
+    vecChannels[iNewChanID].ResetTelemetryV2();
+
     // reset the channel gains/pans of current channel, at the same
     // time reset gains/pans of this channel ID for all other channels
     for ( int i = 0; i < iMaxNumChannels; i++ )
@@ -1772,11 +1804,12 @@ void CServer::WriteTelemetryV2()
             strHist += ( b ? "," : "" ) + QString::number ( vecChannels[iChanID].GetArrivalBucket ( b ) );
         }
 
-        out << QString ( "t2 %1 ch=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runs=%8 runsum=%9 runge32=%10 runmax=%11 "
-                         "drag=%12/%13 jbuf=%14 auto=%15 coded=%16 chans=%17 conn=%18 hw=%19 "
-                         "gap=%20 aud=%21/%22 peak=%23 fmtchg=%24 tick=%25/%26/%27\n" )
+        out << QString ( "t2 %1 ch=%2 sess=%3 conceal=%4/%5 seq=%6/%7 reord=%8 runs=%9 runsum=%10 runge32=%11 runmax=%12 "
+                         "drag=%13/%14 jbuf=%15 auto=%16 coded=%17 chans=%18 conn=%19 hw=%20 "
+                         "gap=%21 aud=%22/%23 peak=%24 fmtchg=%25 tick=%26/%27/%28\n" )
                    .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
                    .arg ( iChanID )
+                   .arg ( vecChannels[iChanID].GetTelemSession() ) // sess= slot-reuse serial
                    .arg ( vecChannels[iChanID].GetCumConcealFails() )
                    .arg ( vecChannels[iChanID].GetCumConcealBlocks() )
                    .arg ( vecChannels[iChanID].GetCumSeqLost() )

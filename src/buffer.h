@@ -310,6 +310,16 @@ public:
         iDragFwd.store ( 0, std::memory_order_relaxed );
     }
 
+    void ResetTelemetryForNewConnection()
+    {
+        // Unlike ResetRunStats, this DOES zero iRunCur: a new occupant of the channel slot must
+        // not inherit the previous occupant's run in progress. Caller holds the channel's
+        // MutexSocketBuf, so the non-atomic iRunCur write cannot race Get().
+        iRunCur = 0;
+        ResetRunStats();
+        ResetSeqStats();
+    }
+
 protected:
     enum EBufState
     {
