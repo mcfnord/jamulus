@@ -316,10 +316,10 @@ protected:
 
     CHighPrecisionTimer HighPrecisionTimer;
 
-    // concealment-rate telemetry (PLAN-ADAPTIVE-PLC.md Step 1d): main-thread poller,
-    // kept off the audio thread entirely - GetData() only writes an atomic
+    // Main-thread poller that drives telemetry v2 (was PLAN-ADAPTIVE-PLC.md Step 1d's
+    // concealment-rate logger; that log line was removed 2026-08-20 -- see WriteTelemetryV2).
+    // Kept off the audio thread entirely: GetData() only writes atomics.
     QTimer ConcealTelemetryTimer;
-    int    aiLastLoggedConcealPct[MAX_NUM_CHANNELS];
 
     // Telemetry v2 (OPEN-TEST-PLANS.md §105c): a per-channel record every 30 s to a dedicated
     // file, with a disk cap this server enforces itself. It writes RAW counts, never quotients --
@@ -336,7 +336,6 @@ protected:
     quint64  iTelemV2TicksLate1ms = 0;
     qint64   iTelemV2TickMaxLateUs = 0;
     QString  strTelemV2Path;
-    int    aiLastLoggedSeqLossPct[MAX_NUM_CHANNELS]; // §65: wire loss beside the concealment figure
     QTimer              TimerCapacityLog;
 
     // server list

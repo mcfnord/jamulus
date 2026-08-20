@@ -237,8 +237,6 @@ CServer::CServer ( const int          iNewMaxNumChan,
     {
         vecChannels[i].SetEnable ( true );
         vecChannelOrder[i] = i;
-        aiLastLoggedConcealPct[i]  = -1; // concealment-rate telemetry: no window logged yet
-        aiLastLoggedSeqLossPct[i]  = -1;
     }
 
     int iAvailableCores = QThread::idealThreadCount();
@@ -1848,41 +1846,6 @@ void CServer::OnConcealTelemetryTimer()
     {
         iTelemV2TickCount = 0;
         WriteTelemetryV2();
-    }
-
-    // Bounded: at most iMaxNumChannels relaxed atomic loads per second; logs only
-    // on change, and the value changes at most once per ~2 s window per channel.
-    for ( int iChanID = 0; iChanID < iMaxNumChannels; iChanID++ )
-    {
-        if ( vecChannels[iChanID].IsConnected() )
-        {
-            const int iConcealPct = vecChannels[iChanID].GetMeasuredConcealPct();
-            const int iSeqLossPct = vecChannels[iChanID].GetMeasuredSeqLossPct();
-            const int iSeqRecv    = vecChannels[iChanID].GetMeasuredSeqRecv();
-
-            // log when EITHER figure moves: concealment can sit still while the
-            // wire-loss reading behind it changes, and a census that only sees
-            // concealment is the instrument §65 exists to replace
-            if ( ( iConcealPct != -1 ) &&
-                 ( ( iConcealPct != aiLastLoggedConcealPct[iChanID] ) || ( iSeqLossPct != aiLastLoggedSeqLossPct[iChanID] ) ) )
-            {
-                qDebug() << qUtf8Printable (
-                    QString ( "adaptive-plc: channel %1 concealment now %2 percent (window %3 blocks) seqloss %4 percent seqrecv %5" )
-                        .arg ( iChanID )
-                        .arg ( iConcealPct )
-                        .arg ( vecChannels[iChanID].GetConcealWindowLen() )
-                        .arg ( iSeqLossPct )
-                        .arg ( iSeqRecv ) );
-
-                aiLastLoggedConcealPct[iChanID] = iConcealPct;
-                aiLastLoggedSeqLossPct[iChanID] = iSeqLossPct;
-            }
-        }
-        else if ( aiLastLoggedConcealPct[iChanID] != -1 )
-        {
-            aiLastLoggedConcealPct[iChanID] = -1;
-            aiLastLoggedSeqLossPct[iChanID] = -1;
-        }
     }
 }
 
