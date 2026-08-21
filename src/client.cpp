@@ -4,21 +4,43 @@
  * Author(s):
  *  Volker Fischer
  *
+ * As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ * under AGPL 3.0 or any later version.
+ *
+ * Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ * This code will be licensed under GPL 3.0 (or any later version) from
+ * 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ * the combined work, including network use provisions.
+ *
  ******************************************************************************
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option) any later
- * version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
 \******************************************************************************/
 
@@ -173,7 +195,15 @@ CClient::CClient ( const quint16  iPortNumber,
     QObject::connect ( &ConnLessProtocol, &CProtocol::CLChannelLevelListReceived, this, &CClient::OnCLChannelLevelListReceived );
 
     // other
-    QObject::connect ( &Sound, &CSound::ReinitRequest, this, &CClient::OnSndCrdReinitRequest );
+    QObject::connect ( &Sound,
+                       &CSound::ReinitRequest,
+                       this,
+                       &CClient::OnSndCrdReinitRequest
+#if defined( Q_OS_WINDOWS )
+                       ,
+                       Qt::QueuedConnection // On Windows, use a queued connection to avoid an ASIO4ALL hang (#3867)
+#endif
+    );
 
     QObject::connect ( &Sound, &CSound::ControllerInFaderLevel, this, &CClient::OnControllerInFaderLevel );
 
@@ -730,14 +760,12 @@ bool CClient::GetAndResetbJitterBufferOKFlag()
     // get the socket buffer put status flag and reset it
     const bool bSocketJitBufOKFlag = Socket.GetAndResetbJitterBufferOKFlag();
 
-    if ( !bJitterBufferOK )
+    // atomically read our own get status flag and reset it to OK
+    if ( !bJitterBufferOK.exchange ( true ) )
     {
         // our jitter buffer get status is not OK so the overall status of the
         // jitter buffer is also not OK (we do not have to consider the status
         // of the socket buffer put status flag)
-
-        // reset flag before returning the function
-        bJitterBufferOK = true;
         return false;
     }
 
@@ -837,6 +865,8 @@ void CClient::SetAudioChannels ( const EAudChanConf eNAudChanConf )
 
 QString CClient::SetSndCrdDev ( const QString strNewDev )
 {
+    QString strError = "";
+
     // if client was running then first
     // stop it and restart again after new initialization
     const bool bWasRunning = Sound.IsRunning();
@@ -845,16 +875,25 @@ QString CClient::SetSndCrdDev ( const QString strNewDev )
         Sound.Stop();
     }
 
-    const QString strError = Sound.SetDev ( strNewDev );
-
-    // init again because the sound card actual buffer size might
-    // be changed on new device
-    Init();
-
-    if ( bWasRunning )
+    // Jamulus sound drivers for different platforms may throw CGenErr exception
+    // on error condition. Catch it here as exceptions must not escape from a Qt slot.
+    try
     {
-        // restart client
-        Sound.Start();
+        strError = Sound.SetDev ( strNewDev );
+
+        // init again because the sound card actual buffer size might
+        // be changed on new device
+        Init();
+
+        if ( bWasRunning )
+        {
+            // restart client
+            Sound.Start();
+        }
+    }
+    catch ( const CGenErr& generr )
+    {
+        strError = generr.GetErrorText();
     }
 
     // in case of an error inform the GUI about it
@@ -952,7 +991,11 @@ void CClient::OnSndCrdReinitRequest ( int iSndCrdResetType )
 
     // audio device notifications can come at any time and they are in a
     // different thread, therefore we need a mutex here
-    MutexDriverReinit.lock();
+    QMutexLocker locker ( &MutexDriverReinit );
+
+    // Jamulus sound drivers for different platforms may throw CGenErr exception
+    // on error condition. Catch it here as exceptions must not escape from a Qt slot.
+    try
     {
         // in older QT versions, enums cannot easily be used in signals without
         // registering them -> workaroud: we use the int type and cast to the enum
@@ -987,7 +1030,10 @@ void CClient::OnSndCrdReinitRequest ( int iSndCrdResetType )
             Sound.Start();
         }
     }
-    MutexDriverReinit.unlock();
+    catch ( const CGenErr& generr )
+    {
+        strError = generr.GetErrorText();
+    }
 
     // inform GUI about the sound card device change
     emit SoundDeviceChanged ( strError );
