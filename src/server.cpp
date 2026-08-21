@@ -298,6 +298,23 @@ CServer::CServer ( const int          iNewMaxNumChan,
     strTelemV2Path = qEnvironmentVariableIsSet ( "JAMULUS_TELEMETRY_PATH" )
                          ? qEnvironmentVariable ( "JAMULUS_TELEMETRY_PATH" )
                          : QString ( "/var/log/jamulus/telemetry-v2-%1.log" ).arg ( iPortNumber );
+
+    // §105h auto-jitter diagnostic. DEFAULT ON (operator, 2026-08-21: "I want 3.12.4-JAMFAN-xx
+    // to always include instrumentation") -- a fleet binary and a diagnostic binary being
+    // different artefacts is exactly how §105d ended up with a mid-soak binary swap nobody
+    // recorded. Set JAMULUS_TELEMETRY_AUTODIAG=0 to suppress.
+    //
+    // Cost, measured: ten extra integers against a 239 B mean record, ~+25%, i.e. roughly
+    // 0.96 -> ~1.2 MB/day/channel. Trivial against the 500 MB free-space floor.
+    //
+    // Read ONCE here, never in the emit path -- the emit runs off the audio timer and must not
+    // touch the environment (convention 8).
+    bTelemV2AutoDiag = ( qEnvironmentVariable ( "JAMULUS_TELEMETRY_AUTODIAG", "1" ) != "0" );
+
+    if ( bTelemV2AutoDiag )
+    {
+        qInfo() << "telemetry-v2: auto-jitter diagnostic ON (simerr=/bound=/dec= per record)";
+    }
     {
         // Cap = min(200 MB, 5% of the filesystem's free space), decided once from what is actually
         // there rather than assumed. On a host with 200 MB free a fixed 200 MB cap would fill it.
@@ -1826,7 +1843,7 @@ void CServer::WriteTelemetryV2()
 
         out << QString ( "t2 %1 ch=%2 sess=%3 conceal=%4/%5 seq=%6/%7 reord=%8 runs=%9 runsum=%10 runge32=%11 runmax=%12 "
                          "drag=%13/%14 jbuf=%15 auto=%16 coded=%17 chans=%18 conn=%19 hw=%20 "
-                         "gap=%21 aud=%22/%23 peak=%24 fmtchg=%25 tick=%26/%27/%28\n" )
+                         "gap=%21 aud=%22/%23 peak=%24 fmtchg=%25 tick=%26/%27/%28" )   // newline emitted below, after the optional §105h fields
                    .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
                    .arg ( iChanID )
                    .arg ( vecChannels[iChanID].GetTelemSession() ) // sess= slot-reuse serial
@@ -1855,6 +1872,42 @@ void CServer::WriteTelemetryV2()
                    .arg ( iTelemV2Ticks )                                    // tick= ticks/late>1ms/maxlate_us
                    .arg ( iTelemV2TicksLate1ms )
                    .arg ( iTelemV2TickMaxLateUs );
+
+        // Auto-jitter diagnostic. ON by default since 2026-08-21; JAMULUS_TELEMETRY_AUTODIAG=0 suppresses.
+        //
+        // Cost measured: ten extra numbers against a 239 B mean record, ~+25% (0.96 -> ~1.2
+        // MB/day/channel). Accepted fleet-wide so the diagnostic and fleet binaries never diverge.
+        //
+        // simerr= is the average error rate of each SIMULATED buffer, sizes 2..11 in order
+        // (buffer.cpp viBufSizesForSim), in PARTS PER MILLION so the record stays integer-only.
+        // bound= is the algorithm's own decision threshold in the same units (0.0005 -> 500).
+        // dec= is the RAW per-window decision before the asymmetric IIR filter; jbuf= above is
+        // the filtered result actually applied. dec != jbuf is the filter doing its work.
+        //
+        // NOTE ON UNITS, and it is the whole point of the experiment: ErrorRateStatistic is
+        // updated on every Put AND every Get, so its denominator is ~2x the block count, while
+        // conceal= counts GS_BUFFER_UNDERRUN per Get only. Expect simerr ~ conceal/2 if the
+        // simulation reflects reality. Comparing simerr to conceal directly is a 2x error.
+        if ( bTelemV2AutoDiag )
+        {
+            CVector<double> vecErrRates;
+            double          dLimit      = 0.0;
+            double          dMaxUpLimit = 0.0;
+            vecChannels[iChanID].GetBufErrorRates ( vecErrRates, dLimit, dMaxUpLimit );
+
+            QString strSimErr;
+            for ( int e = 0; e < vecErrRates.Size(); e++ )
+            {
+                strSimErr += ( e ? "," : "" ) + QString::number ( static_cast<int> ( vecErrRates[e] * 1e6 + 0.5 ) );
+            }
+
+            out << QString ( " simerr=%1 bound=%2 dec=%3" )
+                       .arg ( strSimErr )
+                       .arg ( static_cast<int> ( dLimit * 1e6 + 0.5 ) )
+                       .arg ( vecChannels[iChanID].GetBufPreFilterDecision() );
+        }
+
+        out << "\n";
     }
 
     f.close();

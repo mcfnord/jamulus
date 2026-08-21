@@ -349,6 +349,10 @@ protected:
     int      iTelemV2TickCount   = 0;
     qint64   iTelemV2CapBytes    = 0; // decided once at startup from actual free space
     bool     bTelemV2Suspended   = false;
+    // §105h auto-jitter diagnostic. Read ONCE at startup from JAMULUS_TELEMETRY_AUTODIAG so
+    // the audio path never touches the environment; default OFF, so a normal fleet build
+    // emits the unchanged record.
+    bool     bTelemV2AutoDiag    = false;
     int      iTelemV2HighWater   = 0;
     QElapsedTimer TickTimer;
     qint64   iLastTickNs         = 0;

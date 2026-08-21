@@ -161,6 +161,9 @@ public:
         SockBuf.GetErrorRates ( vecErrRates, dLimit, dMaxUpLimit );
     }
 
+    // §105h: raw auto decision before IIR filtering (SockBuf is protected, so this forwards).
+    int GetBufPreFilterDecision() { return SockBuf.GetPreFilterDecision(); }
+
     EAudComprType GetAudioCompressionType() { return eAudioCompressionType; }
     // concealment-rate measurement (PLAN-ADAPTIVE-PLC.md): -1 = no complete window yet
     int GetMeasuredConcealPct() const { return iMeasuredConcealPct.load ( std::memory_order_relaxed ); }

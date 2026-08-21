@@ -403,6 +403,10 @@ public:
     virtual bool Get ( CVector<uint8_t>& vecbyData, const int iOutSize );
 
     int  GetAutoSetting() { return iCurAutoBufferSizeSetting; }
+    // §105h: the raw per-window decision BEFORE the asymmetric IIR filter. Exposed so an
+    // experiment can separate "the metric never saw the problem" from "the filter
+    // discarded what the metric saw". Read-only; no behaviour change.
+    int  GetPreFilterDecision() { return iCurDecidedResult; }
     void GetErrorRates ( CVector<double>& vecErrRates, double& dLimit, double& dMaxUpLimit );
 
 protected:
