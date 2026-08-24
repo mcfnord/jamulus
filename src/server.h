@@ -354,6 +354,16 @@ protected:
     // emits the unchanged record.
     bool     bTelemV2AutoDiag    = false;
     int      iTelemV2HighWater   = 0;
+    // srv= process instance id: this server process's start time, epoch seconds, stamped once.
+    // sess= (channel.h iTelemSession) is a per-CChannel member starting at 0, so every restart
+    // replays sess=1,2,3... on the same slots and two different sessions collide on one
+    // (host, port, ch, sess) key -- measured 2026-08-24 on 14 of 215 keys in the pulled corpus,
+    // where it shows up as a cumulative counter going BACKWARDS. Nothing else in the record
+    // identified the process (the startup lines go to the journal, not the log), so consumers
+    // had to infer restarts by watching for counter resets. With srv= the key is unique by
+    // construction, and restarts become directly countable. A start time rather than a random
+    // id so the value is also readable: it gives process uptime for free.
+    qint64   iTelemV2ServerId    = 0;
     QElapsedTimer TickTimer;
     qint64   iLastTickNs         = 0;
     quint64  iTelemV2Ticks       = 0;

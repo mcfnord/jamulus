@@ -311,6 +311,10 @@ CServer::CServer ( const int          iNewMaxNumChan,
     // touch the environment (convention 8).
     bTelemV2AutoDiag = ( qEnvironmentVariable ( "JAMULUS_TELEMETRY_AUTODIAG", "1" ) != "0" );
 
+    // srv= process instance id, stamped ONCE here (never in the emit path -- convention 8).
+    // See server.h for why the record needs it: sess= restarts at 0 in every new process.
+    iTelemV2ServerId = QDateTime::currentSecsSinceEpoch();
+
     if ( bTelemV2AutoDiag )
     {
         qInfo() << "telemetry-v2: auto-jitter diagnostic ON (simerr=/bound=/dec= per record)";
@@ -1909,6 +1913,11 @@ void CServer::WriteTelemetryV2()
                        .arg ( static_cast<int> ( dLimit * 1e6 + 0.5 ) )
                        .arg ( vecChannels[iChanID].GetBufPreFilterDecision() );
         }
+
+        // srv= goes LAST, after every optional group, so it is purely additive: a parser
+        // anchored on the fixed record prefix still matches, and the two optional tails
+        // (codec=/fsz=/seqcap=, simerr=/bound=/dec=) are found by search, not by position.
+        out << QString ( " srv=%1" ).arg ( iTelemV2ServerId );
 
         out << "\n";
     }
