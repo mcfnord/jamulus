@@ -4,21 +4,43 @@
  * Author(s):
  *  Volker Fischer
  *
+ * As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ * under AGPL 3.0 or any later version.
+ *
+ * Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ * This code will be licensed under GPL 3.0 (or any later version) from
+ * 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ * the combined work, including network use provisions.
+ *
  ******************************************************************************
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option) any later
- * version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
 \******************************************************************************/
 
@@ -368,8 +390,8 @@ protected:
     EAudChanConf           eAudioChannelConf;
     int                    iNumAudioChannels;
     bool                   bIsInitializationPhase;
-    bool                   bMuteOutStream;
-    float                  fMuteOutStreamGain;
+    std::atomic<bool>      bMuteOutStream;
+    std::atomic<float>     fMuteOutStreamGain;
     CVector<unsigned char> vecCeltData;
 
     CHighPrioSocket         Socket;
@@ -378,11 +400,11 @@ protected:
 
     CVector<uint8_t> vecbyNetwData;
 
-    int          iAudioInFader;
-    bool         bReverbOnLeftChan;
-    int          iReverbLevel;
-    CAudioReverb AudioReverb;
-    int          iInputBoost;
+    std::atomic<int>  iAudioInFader;
+    std::atomic<bool> bReverbOnLeftChan;
+    std::atomic<int>  iReverbLevel;
+    CAudioReverb      AudioReverb;
+    std::atomic<int>  iInputBoost;
 
     int iSndCrdPrefFrameSizeFactor;
     int iSndCrdFrameSizeFactor;
@@ -407,10 +429,10 @@ protected:
     bool        bEnableAudioAlerts;
     bool        bEnableOPUS64;
 
-    bool   bJitterBufferOK;
-    bool   bEnableIPv6;
-    bool   bMuteMeInPersonalMix;
-    QMutex MutexDriverReinit;
+    std::atomic<bool> bJitterBufferOK;
+    bool              bEnableIPv6;
+    bool              bMuteMeInPersonalMix;
+    QMutex            MutexDriverReinit;
 
     // server settings
     int  iServerSockBufNumFrames;
@@ -436,8 +458,31 @@ protected:
     QElapsedTimer         PlcAbUptime;
     std::atomic<int>      iPlcAbTarget { 35 };
     int                   iPlcAbApplied = 35; // audio-thread-only
-    int                   iPlcAbLo      = 0;
-    int                   iPlcAbHi      = 35;
+    // Arms cycled in order, one per JAM_AB_SECS segment. Index 0 is the arm a
+    // session starts in, and it is 35 deliberately: that is the value shipped
+    // code uses, so a session opens in stock behaviour before deviating.
+    //
+    // The third arm is 5, not a value above 35: offline, loss_perc saturates
+    // well below 35, so 70 scores within 0.03 dB of 35 in every quality/loss
+    // cell and cannot produce a signal to find. 5 is the knee -- it captures
+    // most of the robustness while giving back the clean-line fidelity 35
+    // spends, and it crosses over with 35 near 5% loss, which is the arm pair
+    // that actually tests whether adapting the value is worth anything.
+    // Measured: scratchpad/plcloss.c, DISCOVERIES 2026-08-11.
+    //
+    // Override with JAM_AB_ARMS="35,0,5"; JAM_AB_LO / JAM_AB_HI still work and
+    // build a two-arm cycle for anything that already scripts them.
+    QVector<int>          vecPlcAbArms { 35, 0, 5 };
+
+    QString strPlcAbArms() const
+    {
+        QStringList lstArms;
+        for ( const int iArm : vecPlcAbArms )
+        {
+            lstArms << QString::number ( iArm );
+        }
+        return lstArms.join ( "," );
+    }
     int                   iPlcAbSegSecs = 120;
     int                   iPlcAbTlmSecs = 10;
     bool                  bPlcAbEnabled = true;

@@ -1,3 +1,73 @@
+### 3.12.4-JAMFAN-00 ###
+
+- Rebased the jamfan fork onto upstream release 3.12.4. No jamfan behaviour change;
+  the version string moves from 3.12.1-JAMFAN-NN to 3.12.4-JAMFAN-NN.
+
+### 3.12.1-BETTER-WIFI-TEST-00 ###
+
+- Field-trial build. Cycles the Opus packet-loss-resilience setting through
+  35 / 0 / 5 while connected, a few seconds per arm, so one player's own
+  connection supplies all three arms under identical network conditions.
+  Aimed at 2.4 GHz Wi-Fi, where loss is bursty enough for the setting to matter.
+
+- Not a release build and not for general use: the audio deliberately changes
+  character during a session.
+
+### 3.12.4 (2026-08-09) ###
+
+- Bug: Make cross-thread run/status flags std::atomic (#3798 batches A/B) (#3800).
+  (contributed by @mcfnord)
+
+- Bug: Client: Make cross-thread audio params and channel/server flags std::atomic (#3802).
+  (contributed by @mcfnord)
+
+- Bug: Client: Fix hang on Windows while changing devices in ASIO4ALL (#3867).
+  (contributed by @ann0see)
+
+- Bug: Client: removed double ping from Connect Dialog, improving accuracy of initial ping times displayed (#3847).
+  (contributed by @softins)
+
+- Bug: Client: Avoid crashing on sound device errors (#3851).
+  (contributed by @softins)
+
+- Bug: Server: Fix #1083: free CJamRecorder if Init() fails (#3838).
+  (contributed by @mcfnord)
+
+- Client: Improved server list navigation in Connect Dialog (#3859, #3870).
+  (contributed by @softins)
+
+- Server: avoid per-frame deep copy of audio buffers in CreateLevelsForAllConChannels (#3803).
+  (contributed by @mcfnord)
+
+
+### 3.12.3 (2026-07-26) ###
+
+- Introduce Directory Server in Asia. This replaces Any Genre 3. Asian/Australian users should from now on use Any Genre Asia (#3697).
+  (contributed by @ann0see)
+
+- Move internal domains from jamulus.io to jamulus.app as .io domains have an unclear future (#3701).
+  (contributed by @ann0see)
+
+- Updated copyright to incorporate AGPL3.0+ (#3712).
+  (contributed by @pljones)
+
+- Bugfix: Fix memory leak for audio alerts (#3728).
+  (contributed by @ann0see)
+
+- Resolve out of bounds access issue (#3810).
+  (contributed by @ann0see)
+
+- Added bounds checking for country code lookup (#3811).
+  (contributed by @ann0see)
+
+- Server: Report OS as Unix if not Windows, Mac, iOS, Android or Linux (#3699).
+  (contributed by @softins)
+
+
+### 3.12.2 (2026-06-24) ###
+
+- Server: fix occasional crash seen when clients < 3.6 change jitter buffer size.
+
 ### 3.12.1dev <- NOTE: the release version number will be 4.0.0 ###
 
 - Add uncompressed audio transmission - dedicated to the memory of Hans Petter Selasky (1982 - 2023)

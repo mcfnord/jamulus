@@ -4,25 +4,50 @@
  * Author(s):
  *  Volker Fischer
  *
+ * As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ * under AGPL 3.0 or any later version.
+ *
+ * Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ * This code will be licensed under GPL 3.0 (or any later version) from
+ * 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ * the combined work, including network use provisions.
+ *
  ******************************************************************************
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option) any later
- * version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
 \******************************************************************************/
 
 #include "server.h"
+#include <QStorageInfo>
+#include <QFileInfo>
+#include <QTextStream>
 #include "centraldefense.h"
 #include "chatreporter.h"
 
@@ -234,7 +259,6 @@ CServer::CServer ( const int          iNewMaxNumChan,
     {
         vecChannels[i].SetEnable ( true );
         vecChannelOrder[i] = i;
-        aiLastLoggedConcealPct[i] = -1; // concealment-rate telemetry: no window logged yet
     }
 
     int iAvailableCores = QThread::idealThreadCount();
@@ -263,6 +287,62 @@ CServer::CServer ( const int          iNewMaxNumChan,
     QObject::connect ( &HighPrecisionTimer, &CHighPrecisionTimer::timeout, this, &CServer::OnTimer );
 
     // concealment-rate telemetry: plain main-thread poll, ~1 s (PLAN-ADAPTIVE-PLC.md Step 1d)
+    // Telemetry v2 setup. Path is overridable so a test rig does not need /var/log; if the file
+    // cannot be opened the writer simply never writes, which is the safe failure. The default
+    // carries the UDP port because fleet hosts run up to SEVEN server processes each
+    // (fleet.json, checked 2026-08-20) -- a shared path would interleave their ch= lines
+    // indistinguishably. The directory is /var/log/jamulus/ rather than /var/log because the
+    // service runs as User=jamulus, which cannot create files in /var/log (root:syslog 755,
+    // verified on a live fleet host 2026-08-20); deploy.sh creates the directory with service
+    // ownership.
+    strTelemV2Path = qEnvironmentVariableIsSet ( "JAMULUS_TELEMETRY_PATH" )
+                         ? qEnvironmentVariable ( "JAMULUS_TELEMETRY_PATH" )
+                         : QString ( "/var/log/jamulus/telemetry-v2-%1.log" ).arg ( iPortNumber );
+
+    // §105h auto-jitter diagnostic. DEFAULT ON (operator, 2026-08-21: "I want 3.12.4-JAMFAN-xx
+    // to always include instrumentation") -- a fleet binary and a diagnostic binary being
+    // different artefacts is exactly how §105d ended up with a mid-soak binary swap nobody
+    // recorded. Set JAMULUS_TELEMETRY_AUTODIAG=0 to suppress.
+    //
+    // Cost, measured: ten extra integers against a 239 B mean record, ~+25%, i.e. roughly
+    // 0.96 -> ~1.2 MB/day/channel. Trivial against the 500 MB free-space floor.
+    //
+    // Read ONCE here, never in the emit path -- the emit runs off the audio timer and must not
+    // touch the environment (convention 8).
+    bTelemV2AutoDiag = ( qEnvironmentVariable ( "JAMULUS_TELEMETRY_AUTODIAG", "1" ) != "0" );
+
+    if ( bTelemV2AutoDiag )
+    {
+        qInfo() << "telemetry-v2: auto-jitter diagnostic ON (simerr=/bound=/dec= per record)";
+    }
+    {
+        // Cap = min(200 MB, 5% of the filesystem's free space), decided once from what is actually
+        // there rather than assumed. On a host with 200 MB free a fixed 200 MB cap would fill it.
+        QStorageInfo si ( QFileInfo ( strTelemV2Path ).absolutePath() );
+        const qint64 iFree    = si.isValid() ? si.bytesAvailable() : 0;
+        const qint64 iFivePct = iFree / 20;
+        iTelemV2CapBytes      = qMin ( static_cast<qint64> ( 200LL * 1024 * 1024 ), iFivePct > 0 ? iFivePct : ( 8LL * 1024 * 1024 ) );
+        qInfo() << qUtf8Printable ( QString ( "telemetry-v2: path %1, cap %2 MB (filesystem free %3 MB)" )
+                                        .arg ( strTelemV2Path )
+                                        .arg ( iTelemV2CapBytes / ( 1024 * 1024 ) )
+                                        .arg ( iFree / ( 1024 * 1024 ) ) );
+
+        // Probe the path once at startup: an unwritable path otherwise fails silently forever.
+        // Real failure mode, not theoretical -- the fleet service runs as User=jamulus, which
+        // cannot create files in /var/log itself (root:syslog 755, verified 2026-08-20).
+        QFile TelemProbe ( strTelemV2Path );
+        if ( TelemProbe.open ( QIODevice::Append | QIODevice::Text ) )
+        {
+            TelemProbe.close();
+        }
+        else
+        {
+            qWarning() << qUtf8Printable ( QString ( "telemetry-v2: CANNOT WRITE %1 (%2) -- no telemetry will be recorded" )
+                                               .arg ( strTelemV2Path )
+                                               .arg ( TelemProbe.errorString() ) );
+        }
+    }
+
     ConcealTelemetryTimer.setInterval ( 1000 );
     QObject::connect ( &ConcealTelemetryTimer, &QTimer::timeout, this, &CServer::OnConcealTelemetryTimer );
 
@@ -646,6 +726,11 @@ void CServer::Stop()
         // stop timer
         HighPrecisionTimer.Stop();
 
+        // telemetry v2: the tick-lateness gauge must not span the idle period -- without this,
+        // the first tick after an idle stretch measures the whole stretch as one late tick and
+        // pins the max forever (measured: a 15 s idle read as tick max 15 011 162 us)
+        TickTimer.invalidate();
+
         // stop concealment-rate telemetry poll
         ConcealTelemetryTimer.stop();
 
@@ -685,6 +770,37 @@ void CServer::OnTimerCapacityLog()
 
 void CServer::OnTimer()
 {
+    // Telemetry v2 group D: the audio tick's own lateness. Without this, a server that is late
+    // looks EXACTLY like every client degrading at once -- and that is also the evidence behind
+    // any future "other players here are not affected" claim. §77p/q measured that the audio tick
+    // occupies the main thread's event loop, so this is the term that goes wrong first.
+    {
+        const double dExpectedMs = ( 1000.0 * ( bUseDoubleSystemFrameSize ? DOUBLE_SYSTEM_FRAME_SIZE_SAMPLES : SYSTEM_FRAME_SIZE_SAMPLES ) ) /
+                                   SYSTEM_SAMPLE_RATE_HZ;
+
+        if ( !TickTimer.isValid() )
+        {
+            TickTimer.start();
+        }
+        else
+        {
+            const qint64 iNowNs  = TickTimer.nsecsElapsed();
+            const double dGapMs  = ( iNowNs - iLastTickNs ) / 1e6;
+            const double dLateMs = dGapMs - dExpectedMs;
+            iLastTickNs          = iNowNs;
+            iTelemV2Ticks++;
+
+            if ( dLateMs > 1.0 )
+            {
+                iTelemV2TicksLate1ms++;
+            }
+            if ( dLateMs > iTelemV2TickMaxLateUs / 1000.0 )
+            {
+                iTelemV2TickMaxLateUs = static_cast<qint64> ( dLateMs * 1000.0 );
+            }
+        }
+    }
+
     //### TEST: BEGIN ###//
     // uncomment next line to do a timer Jitter measurement
     // static CTimingMeas JitterMeas ( 1000, "test2.dat" ); JitterMeas.Measure();
@@ -766,7 +882,7 @@ void CServer::OnTimer()
     if ( iNumClients > 0 )
     {
         // calculate levels for all connected clients
-        const bool bSendChannelLevels = CreateLevelsForAllConChannels ( iNumClients, vecNumAudioChannels, vecvecsData, vecChannelLevels );
+        const bool bSendChannelLevels = CreateLevelsForAllConChannels ( iNumClients );
 
         for ( int iChanCnt = 0; iChanCnt < iNumClients; iChanCnt++ )
         {
@@ -775,6 +891,14 @@ void CServer::OnTimer()
 
             // update socket buffer size
             vecChannels[iCurChanID].UpdateSocketBufferSize();
+
+            // telemetry v2 group C: record whether this channel actually had signal. Concealment
+            // during silence is not a defect anyone hears, and §105b's production data could not
+            // separate the two -- which made every rate in it ambiguous.
+            if ( bSendChannelLevels )
+            {
+                vecChannels[iCurChanID].NoteLevel ( vecChannelLevels[iChanCnt] );
+            }
 
             // send channel levels if they are ready
             if ( bSendChannelLevels )
@@ -928,6 +1052,20 @@ void CServer::DecodeReceiveData ( const int iChanCnt, const int iNumClients )
     else
     {
         CurOpusDecoder = nullptr;
+
+        // No decoder means the compression type is CT_NONE, which is the state a
+        // channel is left in by ResetNetworkTransportProperties() on disconnect and
+        // stays in until the next occupant negotiates transport properties. Nothing
+        // writes vecvecsData in that window (the OPUS branch is skipped for want of a
+        // decoder, and bIsRawAudio is false because iCeltNumCodedBytes is the reset
+        // CELT_MINIMUM_NUM_BYTES), so the buffer would still hold the PREVIOUS
+        // occupant's decoded audio - which is then mixed and handed to the recorder as
+        // the new client's own. Contribute silence instead.
+        //
+        // Zero the whole worst-case buffer, not iClientFrameSizeSamples worth: that
+        // variable is still 0 here, and consumers read numAudioChannels *
+        // iServerFrameSizeSamples, which is a different and larger extent.
+        memset ( &vecvecsData[iChanCnt][0], 0, vecvecsData[iChanCnt].Size() * sizeof ( int16_t ) );
     }
 
     // get gains of all connected channels
@@ -981,9 +1119,9 @@ void CServer::DecodeReceiveData ( const int iChanCnt, const int iNumClients )
 
                 FreeChannel ( iCurChanID ); // note that the channel is now not in use
 
-                // note that no mutex is needed for this shared resource since it is not a
-                // read-modify-write operation but an atomic write and also each thread can
-                // only set it to true and never to false
+                // note that no mutex is needed for this shared resource since it is a
+                // std::atomic write (not a read-modify-write operation) and also each
+                // thread can only set it to true and never to false
                 bChannelIsNowDisconnected = true;
 
                 // since the channel is no longer in use, we should return
@@ -1563,6 +1701,11 @@ void CServer::InitChannel ( const int iNewChanID, const CHostAddress& InetAddr )
     // reset channel info
     vecChannels[iNewChanID].ResetInfo();
 
+    // telemetry v2: new occupant, new session. Slot indices are reused, so without this the
+    // cumulative counters continue from the previous occupant and two players splice into one
+    // apparent session; the bumped sess= serial marks the boundary explicitly.
+    vecChannels[iNewChanID].ResetTelemetryV2();
+
     // reset the channel gains/pans of current channel, at the same
     // time reset gains/pans of this channel ID for all other channels
     for ( int i = 0; i < iMaxNumChannels; i++ )
@@ -1610,30 +1753,177 @@ void CServer::FreeChannel ( const int iCurChanID )
     qWarning() << "FreeChannel() called with invalid channel ID";
 }
 
-void CServer::OnConcealTelemetryTimer()
+// Telemetry v2 disk guard. TWO independent conditions, either of which suspends writing:
+// the file has reached this server's cap, or the filesystem itself is nearly full. A fixed cap
+// would be wrong -- measured 2026-08-20, free space across reachable fleet hosts ranged 2 088 to
+// 7 988 MB and most of the fleet could not be surveyed at all, so the cap is derived from what is
+// actually there. Telemetry must never be the reason an audio server fills its disk.
+bool CServer::TelemetryV2SpaceOk()
 {
-    // Bounded: at most iMaxNumChannels relaxed atomic loads per second; logs only
-    // on change, and the value changes at most once per ~2 s window per channel.
+    QFileInfo fi ( strTelemV2Path );
+
+    if ( fi.exists() && fi.size() >= iTelemV2CapBytes )
+    {
+        return false;
+    }
+
+    QStorageInfo si ( QFileInfo ( strTelemV2Path ).absolutePath() );
+
+    if ( si.isValid() && si.bytesAvailable() < ( 500LL * 1024 * 1024 ) )
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void CServer::WriteTelemetryV2()
+{
+    if ( strTelemV2Path.isEmpty() )
+    {
+        return;
+    }
+
+    if ( !TelemetryV2SpaceOk() )
+    {
+        if ( !bTelemV2Suspended )
+        {
+            // say it exactly once, then stay silent: a suspension that logs every tick is its own
+            // disk problem
+            bTelemV2Suspended = true;
+            qInfo() << "telemetry-v2: SUSPENDED (cap reached or filesystem low); no further records";
+        }
+        return;
+    }
+
+    if ( bTelemV2Suspended )
+    {
+        bTelemV2Suspended = false;
+        qInfo() << "telemetry-v2: resumed";
+    }
+
+    int iConnected = 0;
+
+    for ( int i = 0; i < iMaxNumChannels; i++ )
+    {
+        if ( vecChannels[i].IsConnected() )
+        {
+            iConnected++;
+        }
+    }
+
+    if ( iConnected > iTelemV2HighWater )
+    {
+        iTelemV2HighWater = iConnected;
+    }
+
+    QFile f ( strTelemV2Path );
+
+    if ( !f.open ( QIODevice::Append | QIODevice::Text ) )
+    {
+        return;
+    }
+
+    QTextStream out ( &f );
+
     for ( int iChanID = 0; iChanID < iMaxNumChannels; iChanID++ )
     {
-        if ( vecChannels[iChanID].IsConnected() )
+        if ( !vecChannels[iChanID].IsConnected() )
         {
-            const int iConcealPct = vecChannels[iChanID].GetMeasuredConcealPct();
+            continue;
+        }
 
-            if ( ( iConcealPct != -1 ) && ( iConcealPct != aiLastLoggedConcealPct[iChanID] ) )
+        // Every value below is CUMULATIVE since the channel connected. Difference two samples for
+        // an exact total over any interval -- no window semantics, nothing lost between reports.
+        QString strHist;
+        for ( int b = 0; b < CChannel::iNumArrivalBuckets; b++ )
+        {
+            strHist += ( b ? "," : "" ) + QString::number ( vecChannels[iChanID].GetArrivalBucket ( b ) );
+        }
+
+        out << QString ( "t2 %1 ch=%2 sess=%3 conceal=%4/%5 seq=%6/%7 reord=%8 runs=%9 runsum=%10 runge32=%11 runmax=%12 "
+                         "drag=%13/%14 jbuf=%15 auto=%16 coded=%17 chans=%18 conn=%19 hw=%20 "
+                         "gap=%21 aud=%22/%23 peak=%24 fmtchg=%25 tick=%26/%27/%28 codec=%29 fsz=%30 seqcap=%31" )   // newline emitted below, after the optional §105h fields
+                   .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
+                   .arg ( iChanID )
+                   .arg ( vecChannels[iChanID].GetTelemSession() ) // sess= slot-reuse serial
+                   .arg ( vecChannels[iChanID].GetCumConcealFails() )
+                   .arg ( vecChannels[iChanID].GetCumConcealBlocks() )
+                   .arg ( vecChannels[iChanID].GetCumSeqLost() )
+                   .arg ( vecChannels[iChanID].GetCumSeqSpan() )
+                   .arg ( vecChannels[iChanID].GetCumSeqReorder() )
+                   .arg ( vecChannels[iChanID].GetCumRuns() )
+                   .arg ( vecChannels[iChanID].GetCumRunSum() )
+                   .arg ( vecChannels[iChanID].GetCumRunsGE32() )
+                   .arg ( vecChannels[iChanID].GetCumRunMax() )
+                   .arg ( vecChannels[iChanID].GetCumDragBack() )
+                   .arg ( vecChannels[iChanID].GetCumDragFwd() )
+                   .arg ( vecChannels[iChanID].GetSockBufNumFrames() )
+                   .arg ( vecChannels[iChanID].GetAutoSockBufSize() ? 1 : 0 )
+                   .arg ( vecChannels[iChanID].GetCeltNumCodedBytes() )
+                   .arg ( vecChannels[iChanID].GetNumAudioChannels() )
+                   .arg ( iConnected )
+                   .arg ( iTelemV2HighWater )
+                   .arg ( strHist )                                          // gap= arrival histogram, 8 buckets
+                   .arg ( vecChannels[iChanID].GetCumAudibleWindows() )      // aud= audible / measured windows
+                   .arg ( vecChannels[iChanID].GetCumLevelWindows() )
+                   .arg ( vecChannels[iChanID].GetPeakLevel() )
+                   .arg ( vecChannels[iChanID].GetFormatChanges() )
+                   .arg ( iTelemV2Ticks )                                    // tick= ticks/late>1ms/maxlate_us
+                   .arg ( iTelemV2TicksLate1ms )
+                   .arg ( iTelemV2TickMaxLateUs )
+                   .arg ( static_cast<int> ( vecChannels[iChanID].GetAudioCompressionType() ) ) // codec= CT_NONE/CELT/OPUS/OPUS64 (util.h)
+                   .arg ( vecChannels[iChanID].GetNetwFrameSizeFact() )      // fsz= network frame-size factor
+                   .arg ( vecChannels[iChanID].GetUseSequenceNumber() ? 1 : 0 ); // seqcap= NF_WITH_COUNTER (channel.cpp:456)
+
+        // Auto-jitter diagnostic. ON by default since 2026-08-21; JAMULUS_TELEMETRY_AUTODIAG=0 suppresses.
+        //
+        // Cost measured: ten extra numbers against a 239 B mean record, ~+25% (0.96 -> ~1.2
+        // MB/day/channel). Accepted fleet-wide so the diagnostic and fleet binaries never diverge.
+        //
+        // simerr= is the average error rate of each SIMULATED buffer, sizes 2..11 in order
+        // (buffer.cpp viBufSizesForSim), in PARTS PER MILLION so the record stays integer-only.
+        // bound= is the algorithm's own decision threshold in the same units (0.0005 -> 500).
+        // dec= is the RAW per-window decision before the asymmetric IIR filter; jbuf= above is
+        // the filtered result actually applied. dec != jbuf is the filter doing its work.
+        //
+        // NOTE ON UNITS, and it is the whole point of the experiment: ErrorRateStatistic is
+        // updated on every Put AND every Get, so its denominator is ~2x the block count, while
+        // conceal= counts GS_BUFFER_UNDERRUN per Get only. Expect simerr ~ conceal/2 if the
+        // simulation reflects reality. Comparing simerr to conceal directly is a 2x error.
+        if ( bTelemV2AutoDiag )
+        {
+            CVector<double> vecErrRates;
+            double          dLimit      = 0.0;
+            double          dMaxUpLimit = 0.0;
+            vecChannels[iChanID].GetBufErrorRates ( vecErrRates, dLimit, dMaxUpLimit );
+
+            QString strSimErr;
+            for ( int e = 0; e < vecErrRates.Size(); e++ )
             {
-                qDebug() << qUtf8Printable ( QString ( "adaptive-plc: channel %1 concealment now %2 percent (window %3 blocks)" )
-                                                 .arg ( iChanID )
-                                                 .arg ( iConcealPct )
-                                                 .arg ( vecChannels[iChanID].GetConcealWindowLen() ) );
-
-                aiLastLoggedConcealPct[iChanID] = iConcealPct;
+                strSimErr += ( e ? "," : "" ) + QString::number ( static_cast<int> ( vecErrRates[e] * 1e6 + 0.5 ) );
             }
+
+            out << QString ( " simerr=%1 bound=%2 dec=%3" )
+                       .arg ( strSimErr )
+                       .arg ( static_cast<int> ( dLimit * 1e6 + 0.5 ) )
+                       .arg ( vecChannels[iChanID].GetBufPreFilterDecision() );
         }
-        else if ( aiLastLoggedConcealPct[iChanID] != -1 )
-        {
-            aiLastLoggedConcealPct[iChanID] = -1;
-        }
+
+        out << "\n";
+    }
+
+    f.close();
+}
+
+void CServer::OnConcealTelemetryTimer()
+{
+    // telemetry v2 fires every 30th tick (the timer is 1 s); cumulative counters mean a slower
+    // cadence costs nothing but resolution, and it cuts log volume ~15x against the 2 s window
+    if ( ++iTelemV2TickCount >= 30 )
+    {
+        iTelemV2TickCount = 0;
+        WriteTelemetryV2();
     }
 }
 
@@ -1834,10 +2124,7 @@ void CServer::customEvent ( QEvent* pEvent )
 }
 
 /// @brief Compute frame peak level for each client
-bool CServer::CreateLevelsForAllConChannels ( const int                       iNumClients,
-                                              const CVector<int>&             vecNumAudioChannels,
-                                              const CVector<CVector<int16_t>> vecvecsData,
-                                              CVector<uint16_t>&              vecLevelsOut )
+bool CServer::CreateLevelsForAllConChannels ( const int iNumClients )
 {
     bool bLevelsWereUpdated = false;
 
@@ -1855,7 +2142,7 @@ bool CServer::CreateLevelsForAllConChannels ( const int                       iN
                                                                                                                      vecNumAudioChannels[j] > 1 );
 
             // map value to integer for transmission via the protocol (4 bit available)
-            vecLevelsOut[j] = static_cast<uint16_t> ( std::ceil ( dCurSigLevelForMeterdB ) );
+            vecChannelLevels[j] = static_cast<uint16_t> ( std::ceil ( dCurSigLevelForMeterdB ) );
         }
     }
 

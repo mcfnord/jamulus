@@ -4,21 +4,43 @@
  * Author(s):
  *  Volker Fischer
  *
+ * As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ * under AGPL 3.0 or any later version.
+ *
+ * Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ * This code will be licensed under GPL 3.0 (or any later version) from
+ * 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ * the combined work, including network use provisions.
+ *
  ******************************************************************************
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option) any later
- * version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
 \******************************************************************************/
 
@@ -31,6 +53,7 @@
 #include <QFileInfo>
 #include <QTimer>
 #include <algorithm>
+#include <atomic>
 #include <functional>
 #ifdef USE_OPUS_SHARED_LIB
 #    include "opus/opus_custom.h"
@@ -246,10 +269,7 @@ protected:
     int                        iMaxNumThreads;
     CVector<std::future<void>> Futures;
 
-    bool CreateLevelsForAllConChannels ( const int                       iNumClients,
-                                         const CVector<int>&             vecNumAudioChannels,
-                                         const CVector<CVector<int16_t>> vecvecsData,
-                                         CVector<uint16_t>&              vecLevelsOut );
+    bool CreateLevelsForAllConChannels ( const int iNumClients );
 
     // do not use the vector class since CChannel does not have appropriate
     // copy constructor/operator
@@ -261,10 +281,10 @@ protected:
     int    vecChannelOrder[MAX_NUM_CHANNELS];
     QMutex MutexChanOrder;
 
-    CProtocol ConnLessProtocol;
-    QMutex    Mutex;
-    QMutex    MutexWelcomeMessage;
-    bool      bChannelIsNowDisconnected;
+    CProtocol         ConnLessProtocol;
+    QMutex            Mutex;
+    QMutex            MutexWelcomeMessage;
+    std::atomic<bool> bChannelIsNowDisconnected;
 
     // audio encoder/decoder
     OpusCustomMode*    Opus64Mode[MAX_NUM_CHANNELS];
@@ -316,10 +336,30 @@ protected:
 
     CHighPrecisionTimer HighPrecisionTimer;
 
-    // concealment-rate telemetry (PLAN-ADAPTIVE-PLC.md Step 1d): main-thread poller,
-    // kept off the audio thread entirely - GetData() only writes an atomic
+    // Main-thread poller that drives telemetry v2 (was PLAN-ADAPTIVE-PLC.md Step 1d's
+    // concealment-rate logger; that log line was removed 2026-08-20 -- see WriteTelemetryV2).
+    // Kept off the audio thread entirely: GetData() only writes atomics.
     QTimer ConcealTelemetryTimer;
-    int    aiLastLoggedConcealPct[MAX_NUM_CHANNELS];
+
+    // Telemetry v2 (OPEN-TEST-PLANS.md §105c): a per-channel record every 30 s to a dedicated
+    // file, with a disk cap this server enforces itself. It writes RAW counts, never quotients --
+    // §105b failed precisely because a rounded per-window rate cannot be reconstructed.
+    void     WriteTelemetryV2();
+    bool     TelemetryV2SpaceOk();
+    int      iTelemV2TickCount   = 0;
+    qint64   iTelemV2CapBytes    = 0; // decided once at startup from actual free space
+    bool     bTelemV2Suspended   = false;
+    // §105h auto-jitter diagnostic. Read ONCE at startup from JAMULUS_TELEMETRY_AUTODIAG so
+    // the audio path never touches the environment; default OFF, so a normal fleet build
+    // emits the unchanged record.
+    bool     bTelemV2AutoDiag    = false;
+    int      iTelemV2HighWater   = 0;
+    QElapsedTimer TickTimer;
+    qint64   iLastTickNs         = 0;
+    quint64  iTelemV2Ticks       = 0;
+    quint64  iTelemV2TicksLate1ms = 0;
+    qint64   iTelemV2TickMaxLateUs = 0;
+    QString  strTelemV2Path;
     QTimer              TimerCapacityLog;
 
     // server list

@@ -4,24 +4,46 @@
  * Author(s):
  *  Volker Fischer
  *
+ * As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ * under AGPL 3.0 or any later version.
+ *
+ * Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ * This code will be licensed under GPL 3.0 (or any later version) from
+ * 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ * the combined work, including network use provisions.
+ *
  * Note: We are assuming here that put and get operations are secured by a mutex
  *       and accessing does not occur at the same time.
  *
  ******************************************************************************
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option) any later
- * version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
 \******************************************************************************/
 
@@ -158,6 +180,61 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
             // the sequence number is appended after the coded audio data)
             const int iCurrentSequenceNumber = vecbyData[iBlockOffset + iBlockSize];
 
+            // wire-loss statistics (buffer.h, OPEN-TEST-PLANS.md §65). Done here,
+            // before any of the window-shifting below, so what is counted is the
+            // stream as the sender emitted it rather than as the buffer chose to
+            // reconcile it.
+            {
+                const uint8_t iSeqByte = static_cast<uint8_t> ( iCurrentSequenceNumber );
+
+                if ( !bSeqStatValid )
+                {
+                    bSeqStatValid = true;
+                    iSeqStatCur   = 0;
+                    iSeqStatMax   = 0;
+                }
+                else
+                {
+                    // unwrap against the previously received byte, the same
+                    // +-128 nearest-representative rule the buffer window uses
+                    int iStep = static_cast<int> ( iSeqByte ) - static_cast<int> ( iSeqStatPrev );
+
+                    if ( iStep < -128 )
+                    {
+                        iStep += 256;
+                    }
+                    else if ( iStep >= 128 )
+                    {
+                        iStep -= 256;
+                    }
+
+                    const int iCur = iSeqStatCur + iStep;
+                    iSeqStatCur    = iCur;
+
+                    if ( iCur > iSeqStatMax )
+                    {
+                        // the span grew: everything skipped over is missing so far
+                        iSeqLoss.fetch_add ( iCur - iSeqStatMax - 1, std::memory_order_relaxed );
+                        iSeqStatMax = iCur;
+                    }
+                    else
+                    {
+                        // a late or reordered packet: it closes a gap that was
+                        // already booked as loss, so give that one back
+                        iSeqReorder.fetch_add ( 1, std::memory_order_relaxed );
+
+                        uint32_t iPrevLoss = iSeqLoss.load ( std::memory_order_relaxed );
+
+                        while ( iPrevLoss > 0 && !iSeqLoss.compare_exchange_weak ( iPrevLoss, iPrevLoss - 1, std::memory_order_relaxed ) )
+                        {
+                        }
+                    }
+                }
+
+                iSeqStatPrev = iSeqByte;
+                iSeqRecv.fetch_add ( 1, std::memory_order_relaxed );
+            }
+
             // calculate the sequence number difference and take care of wrap
             int iSeqNumDiff = iCurrentSequenceNumber - static_cast<int> ( iSequenceNumberAtGetPos );
 
@@ -184,6 +261,8 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
             // buffer which did not use any sequence number at all.
             if ( iSeqNumDiff < 0 )
             {
+                iDragBack.fetch_add ( 1, std::memory_order_relaxed ); // telemetry v2
+
                 // the received packet comes too late so we shift the "buffer window" to the past
                 // until the received packet is the very first packet in the buffer
                 for ( int i = iSeqNumDiff; i < 0; i++ )
@@ -206,6 +285,8 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
             }
             else if ( iSeqNumDiff >= iNumBlocksMemory )
             {
+                iDragFwd.fetch_add ( 1, std::memory_order_relaxed ); // telemetry v2
+
                 // the received packet comes too early so we move the "buffer window" in the
                 // future until the received packet is the last packet in the buffer
                 for ( int i = 0; i < iSeqNumDiff - iNumBlocksMemory + 1; i++ )
@@ -348,6 +429,37 @@ bool CNetBuf::Get ( CVector<uint8_t>& vecbyData, const int iOutSize )
     else
     {
         eBufState = BS_OK;
+    }
+
+    // Telemetry v2: consecutive-concealment run length. A failed Get extends the current run; a
+    // successful one closes it. Independent loss reads a mean run of exactly 1.0, an ordered
+    // stall-and-drain reads tens -- which is the whole discriminator (OPEN-TEST-PLANS.md §105c).
+    // Simulation buffers are excluded: CNetBufWithStats runs ten of them per channel and their
+    // Get failures are hypothetical, not audio anyone lost.
+    if ( !bIsSimulation )
+    {
+        if ( bReturn )
+        {
+            if ( iRunCur > 0 )
+            {
+                const uint32_t iRun = static_cast<uint32_t> ( iRunCur );
+                iRuns.fetch_add ( 1, std::memory_order_relaxed );
+                iRunSum.fetch_add ( iRun, std::memory_order_relaxed );
+                if ( iRun >= 32 )
+                {
+                    iRunsGE32.fetch_add ( 1, std::memory_order_relaxed );
+                }
+                uint32_t iPrevMax = iRunMax.load ( std::memory_order_relaxed );
+                while ( iRun > iPrevMax && !iRunMax.compare_exchange_weak ( iPrevMax, iRun, std::memory_order_relaxed ) )
+                {
+                }
+                iRunCur = 0;
+            }
+        }
+        else
+        {
+            iRunCur++;
+        }
     }
 
     return bReturn;

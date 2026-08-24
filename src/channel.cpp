@@ -4,21 +4,43 @@
  * Author(s):
  *  Volker Fischer
  *
+ * As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ * under AGPL 3.0 or any later version.
+ *
+ * Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ * This code will be licensed under GPL 3.0 (or any later version) from
+ * 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ * the combined work, including network use provisions.
+ *
  ******************************************************************************
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option) any later
- * version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
 \******************************************************************************/
 
@@ -442,6 +464,14 @@ void CChannel::OnNetTranspPropsReceived ( CNetworkTransportProps NetworkTranspor
                 iCeltNumCodedBytes = iNetwFrameSize;
             }
 
+            // telemetry v2 group E: a client changing audio format mid-session is a real event
+            // and it invalidates any per-session average that spans it
+            if ( iPrevCodedBytesForTelem != 0 && iPrevCodedBytesForTelem != iCeltNumCodedBytes )
+            {
+                iFormatChanges.fetch_add ( 1, std::memory_order_relaxed );
+            }
+            iPrevCodedBytesForTelem = iCeltNumCodedBytes;
+
             // update maximum number of frames for fade in counter (only needed for server)
             // and audio frame size
             if ( eAudioCompressionType == CT_OPUS )
@@ -555,6 +585,55 @@ EPutDataStat CChannel::PutAudioData ( const CVector<uint8_t>& vecbyData, const i
     // - the channel is enabled
     if ( ( bIsServer || ( GetAddress() == RecHostAddr ) ) && IsEnabled() )
     {
+        // Telemetry v2 group B: bucket the inter-arrival gap in units of the nominal frame
+        // period. One clock read per packet on the socket thread -- measured 64.07 ns for the
+        // QElapsedTimer read, 68.6 ns for the whole block (median of 9 interleaved reps,
+        // TELEMETRY.md) -- and it does not block (convention 8 is about blocking, and this cannot).
+        if ( bIsServer && ( iAudioFrameSizeSamples > 0 ) )
+        {
+            if ( !ArrivalTimer.isValid() )
+            {
+                ArrivalTimer.start();
+                iLastArrivalNs = 0;
+            }
+            else
+            {
+                const qint64 iNowNs   = ArrivalTimer.nsecsElapsed();
+                const qint64 iGapNs   = iNowNs - iLastArrivalNs;
+                iLastArrivalNs        = iNowNs;
+                // The denominator is the PACKET period, not the audio-frame period. A client
+                // using iNetwFrameSizeFact > 1 bundles that many audio frames into one UDP
+                // packet, so its packets arrive every fact*frame periods. Dividing by the frame
+                // period alone put every such client in the "1.5-2.5" bucket and left the
+                // on-time bucket nearly empty -- caught immediately by the first real histogram
+                // (gjstress at fact=2 read gap=...,294,10442,... where 294 was supposed to be
+                // the mode).
+                const int    iFact    = ( iNetwFrameSizeFact > 0 ) ? iNetwFrameSizeFact : 1;
+                const double dFrameNs = ( 1e9 * iAudioFrameSizeSamples * iFact ) / SYSTEM_SAMPLE_RATE_HZ;
+                const double dGap     = ( dFrameNs > 0 ) ? ( iGapNs / dFrameNs ) : 0.0;
+
+                int iBucket;
+                if ( dGap < 0.5 )
+                    iBucket = 0; // back-to-back: the release half of a stall-and-drain
+                else if ( dGap < 1.5 )
+                    iBucket = 1; // on time
+                else if ( dGap < 2.5 )
+                    iBucket = 2;
+                else if ( dGap < 4.5 )
+                    iBucket = 3;
+                else if ( dGap < 8.5 )
+                    iBucket = 4;
+                else if ( dGap < 16.5 )
+                    iBucket = 5;
+                else if ( dGap < 32.5 )
+                    iBucket = 6;
+                else
+                    iBucket = 7; // long stall
+
+                aiArrivalHist[iBucket].fetch_add ( 1, std::memory_order_relaxed );
+            }
+        }
+
         MutexSocketBuf.lock();
         {
             // only process audio if packet has correct size
@@ -682,6 +761,46 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
                 // round, don't truncate: truncation reads up to ~1% low
                 iMeasuredConcealPct.store ( ( iConcealFailCount * 100 + iConcealWindowLen / 2 ) / iConcealWindowLen,
                                             std::memory_order_relaxed );
+
+                // wire-loss over the same window (OPEN-TEST-PLANS.md §65). The
+                // concealment figure above says a block was missing; these two
+                // say whether the sender actually sent it. By construction the
+                // span is exactly received + lost, so no separate span counter.
+                const uint32_t iSeqRecvWin = SockBuf.GetSeqRecvCount();
+                const uint32_t iSeqLossWin = SockBuf.GetSeqLossCount();
+                const uint32_t iSeqSpanWin = iSeqRecvWin + iSeqLossWin;
+
+                iMeasuredSeqRecv.store ( iSeqRecvWin, std::memory_order_relaxed );
+                iMeasuredSeqLossPct.store ( ( iSeqSpanWin > 0 )
+                                                ? static_cast<int> ( ( iSeqLossWin * 100 + iSeqSpanWin / 2 ) / iSeqSpanWin )
+                                                : -1, // nothing arrived at all: a rate would be a fiction
+                                            std::memory_order_relaxed );
+                // Telemetry v2 (§105c): CUMULATIVE raw counters, never reset. The percent fields
+                // above keep §65's per-window semantics; these accumulate so a consumer sampling
+                // at any cadence can difference two samples and lose nothing in between. That is
+                // the whole reason §105b could not answer its question -- a rounded per-window
+                // rate cannot be reconstructed, and 96.17% of real windows read "0 percent"
+                // because 4 losses in 750 are needed before the quotient reaches 1.
+                iCumConcealFails.fetch_add ( static_cast<uint32_t> ( iConcealFailCount ), std::memory_order_relaxed );
+                iCumConcealBlocks.fetch_add ( static_cast<uint32_t> ( iConcealWindowLen ), std::memory_order_relaxed );
+                iCumSeqLost.fetch_add ( iSeqLossWin, std::memory_order_relaxed );
+                iCumSeqSpan.fetch_add ( iSeqSpanWin, std::memory_order_relaxed );
+                iCumSeqReorder.fetch_add ( SockBuf.GetSeqReorderCount(), std::memory_order_relaxed );
+                iCumRuns.fetch_add ( SockBuf.GetRunCount(), std::memory_order_relaxed );
+                iCumRunSum.fetch_add ( SockBuf.GetRunSum(), std::memory_order_relaxed );
+                iCumRunsGE32.fetch_add ( SockBuf.GetRunsGE32(), std::memory_order_relaxed );
+                iCumDragBack.fetch_add ( SockBuf.GetDragBackCount(), std::memory_order_relaxed );
+                iCumDragFwd.fetch_add ( SockBuf.GetDragFwdCount(), std::memory_order_relaxed );
+                {
+                    // run_max is a maximum, not a sum: keep the largest ever seen on this channel
+                    const uint32_t iWinMax = SockBuf.GetRunMax();
+                    uint32_t       iPrev   = iCumRunMax.load ( std::memory_order_relaxed );
+                    while ( iWinMax > iPrev && !iCumRunMax.compare_exchange_weak ( iPrev, iWinMax, std::memory_order_relaxed ) )
+                    {
+                    }
+                }
+                SockBuf.ResetRunStats();
+                SockBuf.ResetSeqStats();
 
                 iConcealWindowCount = 0;
                 iConcealFailCount   = 0;

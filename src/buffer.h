@@ -4,26 +4,49 @@
  * Author(s):
  *  Volker Fischer
  *
+ * As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ * under AGPL 3.0 or any later version.
+ *
+ * Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ * This code will be licensed under GPL 3.0 (or any later version) from
+ * 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ * the combined work, including network use provisions.
+ *
  ******************************************************************************
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option) any later
- * version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
 \******************************************************************************/
 
 #pragma once
 
+#include <atomic>
 #include "util.h"
 #include "global.h"
 
@@ -244,6 +267,81 @@ public:
     virtual bool Put ( const CVector<uint8_t>& vecbyData, int iInSize );
     virtual bool Get ( CVector<uint8_t>& vecbyData, const int iOutSize );
 
+    // Wire-loss statistics (PLAN-ADAPTIVE-PLC.md, OPEN-TEST-PLANS.md §65) -----
+    //
+    // The concealment counter in CChannel cannot say WHY a block was missing.
+    // A client that stopped sending, a link dropping packets, and a packet that
+    // merely arrives late all reach CChannel::GetData as GS_BUFFER_UNDERRUN, so
+    // all three read as concealment: a SIGSTOPped client over a loopback link
+    // with zero packet loss reads 100% (rig-plc/silent-client.sh, 2026-08-11).
+    //
+    // The sequence number does separate them, because the SENDER writes it: a
+    // client that is not sending advances nothing at all, a lossy link leaves
+    // gaps that stay open, and a late packet arrives and closes its own gap.
+    // Counted here because this is the only place the received sequence byte
+    // exists -- it is stripped before the audio data reaches the channel.
+    //
+    // Loss is (span - received) maintained incrementally against the RUNNING
+    // MAXIMUM, which makes a late arrival self-correcting: it raises the
+    // received count without raising the span, so it cancels the gap it had
+    // previously opened instead of booking as loss. Measured against netem's
+    // own drop counter on the wire: 4.93% vs 4.97% offered (runs/SEQ-up5).
+    uint32_t GetSeqRecvCount() const { return iSeqRecv.load ( std::memory_order_relaxed ); }
+    uint32_t GetSeqLossCount() const { return iSeqLoss.load ( std::memory_order_relaxed ); }
+    uint32_t GetSeqReorderCount() const { return iSeqReorder.load ( std::memory_order_relaxed ); }
+
+    void ResetSeqStats()
+    {
+        bSeqStatValid = false;
+        iSeqRecv.store ( 0, std::memory_order_relaxed );
+        iSeqLoss.store ( 0, std::memory_order_relaxed );
+        iSeqReorder.store ( 0, std::memory_order_relaxed );
+    }
+
+    // Telemetry v2 (OPEN-TEST-PLANS.md §105c). Two families of counter, both written on the hot
+    // paths and read by CServer's telemetry timer, so both are relaxed atomics like the seq stats
+    // above -- nothing here orders anything.
+    //
+    // 1. CONSECUTIVE-CONCEALMENT RUN LENGTH, accumulated in Get(). This is the discriminator that
+    //    separates the failure regimes: independent loss reads a mean run of exactly 1.0, while an
+    //    ordered stall-and-drain reads tens. Cost measured at +4.1 ns per Get on bare-metal ARM
+    //    against a 1 us gate (DISCOVERIES 2026-08-19, §105a).
+    //    NOTE the name: a long run means "ordered stall-and-drain", NOT "block-ack". That
+    //    attribution was withdrawn 2026-08-20 after the same signature appeared with aggregation
+    //    disabled; see the §102e sweep entry.
+    // 2. WINDOW-DRAG BRANCH COUNTS, accumulated in Put(). buffer.cpp's own comment concedes the
+    //    window drag "throws away valid packets"; §104 measured on 26 traces that it is
+    //    nonetheless the cheaper option. These two counters test that on real traffic.
+    uint32_t GetRunCount() const { return iRuns.load ( std::memory_order_relaxed ); }
+    uint32_t GetRunSum() const { return iRunSum.load ( std::memory_order_relaxed ); }
+    uint32_t GetRunsGE32() const { return iRunsGE32.load ( std::memory_order_relaxed ); }
+    uint32_t GetRunMax() const { return iRunMax.load ( std::memory_order_relaxed ); }
+    uint32_t GetDragBackCount() const { return iDragBack.load ( std::memory_order_relaxed ); }
+    uint32_t GetDragFwdCount() const { return iDragFwd.load ( std::memory_order_relaxed ); }
+
+    void ResetRunStats()
+    {
+        // iRunCur is deliberately NOT reset: a run in progress spans the window boundary and
+        // zeroing it here would split one stall into two short ones, which is precisely the
+        // distinction the counter exists to make.
+        iRuns.store ( 0, std::memory_order_relaxed );
+        iRunSum.store ( 0, std::memory_order_relaxed );
+        iRunsGE32.store ( 0, std::memory_order_relaxed );
+        iRunMax.store ( 0, std::memory_order_relaxed );
+        iDragBack.store ( 0, std::memory_order_relaxed );
+        iDragFwd.store ( 0, std::memory_order_relaxed );
+    }
+
+    void ResetTelemetryForNewConnection()
+    {
+        // Unlike ResetRunStats, this DOES zero iRunCur: a new occupant of the channel slot must
+        // not inherit the previous occupant's run in progress. Caller holds the channel's
+        // MutexSocketBuf, so the non-atomic iRunCur write cannot race Get().
+        iRunCur = 0;
+        ResetRunStats();
+        ResetSeqStats();
+    }
+
 protected:
     enum EBufState
     {
@@ -264,9 +362,29 @@ protected:
     int                       iBlockSize;
     uint8_t                   iSequenceNumberAtGetPos; // uint8_t so that it wraps automatically
     EBufState                 eBufState;
+    // telemetry v2 counters -- see the getters above
+    int                   iRunCur = 0; // touched only in Get(), i.e. one thread: no atomic needed
+    std::atomic<uint32_t> iRuns { 0 };
+    std::atomic<uint32_t> iRunSum { 0 };
+    std::atomic<uint32_t> iRunsGE32 { 0 };
+    std::atomic<uint32_t> iRunMax { 0 };
+    std::atomic<uint32_t> iDragBack { 0 };
+    std::atomic<uint32_t> iDragFwd { 0 };
+
     bool                      bUseSequenceNumber;
     bool                      bIsSimulation;
     bool                      bIsInitialized;
+
+    // wire-loss statistics; see the accessors above for why these live here.
+    // Written on the network thread, read off-thread by the telemetry timer,
+    // hence atomic -- matching iConcealFailsCum in CChannel.
+    bool                  bSeqStatValid = false; // false until the first packet of a window
+    uint8_t               iSeqStatPrev  = 0;     // last received sequence byte, for unwrapping
+    int                   iSeqStatCur   = 0;     // unwrapped position of that last received packet
+    int                   iSeqStatMax   = 0;     // running maximum, which is what the span is measured to
+    std::atomic<uint32_t> iSeqRecv { 0 };
+    std::atomic<uint32_t> iSeqLoss { 0 };
+    std::atomic<uint32_t> iSeqReorder { 0 };
 
     static constexpr int iNumBytesSeqNum = 1; // per definition 1 byte sequence counter
 };
@@ -285,6 +403,10 @@ public:
     virtual bool Get ( CVector<uint8_t>& vecbyData, const int iOutSize );
 
     int  GetAutoSetting() { return iCurAutoBufferSizeSetting; }
+    // §105h: the raw per-window decision BEFORE the asymmetric IIR filter. Exposed so an
+    // experiment can separate "the metric never saw the problem" from "the filter
+    // discarded what the metric saw". Read-only; no behaviour change.
+    int  GetPreFilterDecision() { return iCurDecidedResult; }
     void GetErrorRates ( CVector<double>& vecErrRates, double& dLimit, double& dMaxUpLimit );
 
 protected:

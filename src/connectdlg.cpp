@@ -4,21 +4,43 @@
  * Author(s):
  *  Volker Fischer
  *
+ * As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ * under AGPL 3.0 or any later version.
+ *
+ * Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ * This code will be licensed under GPL 3.0 (or any later version) from
+ * 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ * the combined work, including network use provisions.
+ *
  ******************************************************************************
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option) any later
- * version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
- * details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
 \******************************************************************************/
 
@@ -102,6 +124,7 @@ bool CMappedTreeWidgetItem::operator<( const QTreeWidgetItem& other ) const
 
 CConnectDlg::CConnectDlg ( CClientSettings* pNSetP, const bool bNewShowCompleteRegList, const bool bNEnableIPv6, QWidget* parent ) :
     CBaseDlg ( parent, Qt::Dialog ),
+    savedServer ( nullptr ),
     pSettings ( pNSetP ),
     strSelectedAddress ( "" ),
     strSelectedServerName ( "" ),
@@ -183,6 +206,10 @@ CConnectDlg::CConnectDlg ( CClientSettings* pNSetP, const bool bNewShowCompleteR
     cbxServerAddr->setMaxCount ( MAX_NUM_SERVER_ADDR_ITEMS );
     cbxServerAddr->setInsertPolicy ( QComboBox::NoInsert );
 
+    // install event filter to catch FocusIn
+    cbxServerAddr->installEventFilter ( this );
+    lvwServers->installEventFilter ( this );
+
     // set up list view for connected clients (note that the last column size
     // must not be specified since this column takes all the remaining space)
 #ifdef ANDROID
@@ -254,9 +281,10 @@ CConnectDlg::CConnectDlg ( CClientSettings* pNSetP, const bool bNewShowCompleteR
     QObject::connect ( edtFilter, &QLineEdit::textEdited, this, &CConnectDlg::OnFilterTextEdited );
 
     // combo boxes
-    QObject::connect ( cbxServerAddr, &QComboBox::editTextChanged, this, &CConnectDlg::OnServerAddrEditTextChanged );
-
     QObject::connect ( cbxDirectory, static_cast<void ( QComboBox::* ) ( int )> ( &QComboBox::activated ), this, &CConnectDlg::OnDirectoryChanged );
+
+    // connect when pressing Enter in the Server Address box
+    QObject::connect ( cbxServerAddr->lineEdit(), &QLineEdit::returnPressed, this, &CConnectDlg::OnConnectClicked );
 
     // check boxes
     QObject::connect ( chbExpandAll, &QCheckBox::stateChanged, this, &CConnectDlg::OnExpandAllStateChanged );
@@ -296,6 +324,9 @@ void CConnectDlg::showEvent ( QShowEvent* )
 
 void CConnectDlg::RequestServerList()
 {
+    // ensure ping timer is stopped
+    TimerPing.stop();
+
     // reset flags
     bServerListReceived        = false;
     bReducedServerListReceived = false;
@@ -307,6 +338,7 @@ void CConnectDlg::RequestServerList()
     strSelectedServerName = "";
 
     // clear server list view
+    savedServer = nullptr;
     lvwServers->clear();
 
     // update list combo box (disable events to avoid a signal)
@@ -418,6 +450,7 @@ void CConnectDlg::SetServerList ( const CHostAddress& InetAddr, const CVector<CS
     }
 
     // first clear list
+    savedServer = nullptr;
     lvwServers->clear();
 
     // add list item for each server in the server list
@@ -538,10 +571,14 @@ void CConnectDlg::SetServerList ( const CHostAddress& InetAddr, const CVector<CS
         }
     }
 
+    // only if the ping timer is not already running (avoids double ping):
     // immediately issue the ping measurements and start the ping timer since
     // the server list is filled now
-    OnTimerPing();
-    TimerPing.start ( PING_UPDATE_TIME_SERVER_LIST_MS );
+    if ( !TimerPing.isActive() )
+    {
+        OnTimerPing();
+        TimerPing.start ( PING_UPDATE_TIME_SERVER_LIST_MS );
+    }
 }
 
 void CConnectDlg::SetConnClientsList ( const CHostAddress& InetAddr, const CVector<CChannelInfo>& vecChanInfo )
@@ -630,13 +667,6 @@ void CConnectDlg::OnServerListItemDoubleClicked ( QTreeWidgetItem* Item, int )
     {
         OnConnectClicked();
     }
-}
-
-void CConnectDlg::OnServerAddrEditTextChanged ( const QString& )
-{
-    // in the server address combo box, a text was changed, remove selection
-    // in the server list (if any)
-    lvwServers->clearSelection();
 }
 
 void CConnectDlg::OnCustomDirectoriesChanged()
@@ -1163,4 +1193,38 @@ void CConnectDlg::OnCurrentServerItemChanged ( QTreeWidgetItem* current, QTreeWi
     }
     QAccessible::updateAccessibility ( new QAccessibleAnnouncementEvent ( lvwServers, announcement ) );
 #endif
+}
+
+bool CConnectDlg::eventFilter ( QObject* obj, QEvent* event )
+{
+    if ( obj == cbxServerAddr && event->type() == QEvent::FocusIn )
+    {
+        // check for a selected server before clearing the selection in the list
+        QList<QTreeWidgetItem*> CurSelListItemList = lvwServers->selectedItems();
+
+        if ( CurSelListItemList.count() > 0 )
+        {
+            // there was a selected item - save it before deselecting
+            savedServer = GetParentListViewItem ( CurSelListItemList[0] );
+        }
+        // remove selection in the server list (if any)
+        lvwServers->clearSelection();
+    }
+
+    if ( obj == lvwServers && event->type() == QEvent::FocusIn )
+    {
+        if ( savedServer )
+        {
+            // re-select any previously-selected server on regaining focus
+            lvwServers->setCurrentItem ( savedServer );
+            savedServer = nullptr;
+        }
+        else if ( lvwServers->topLevelItemCount() > 0 )
+        {
+            // no saved server: select first item in list for keyboard navigation
+            lvwServers->setCurrentItem ( lvwServers->topLevelItem ( 0 ) );
+        }
+    }
+
+    return QDialog::eventFilter ( obj, event );
 }
