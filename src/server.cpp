@@ -1843,7 +1843,7 @@ void CServer::WriteTelemetryV2()
 
         out << QString ( "t2 %1 ch=%2 sess=%3 conceal=%4/%5 seq=%6/%7 reord=%8 runs=%9 runsum=%10 runge32=%11 runmax=%12 "
                          "drag=%13/%14 jbuf=%15 auto=%16 coded=%17 chans=%18 conn=%19 hw=%20 "
-                         "gap=%21 aud=%22/%23 peak=%24 fmtchg=%25 tick=%26/%27/%28" )   // newline emitted below, after the optional §105h fields
+                         "gap=%21 aud=%22/%23 peak=%24 fmtchg=%25 tick=%26/%27/%28 codec=%29 fsz=%30 seqcap=%31" )   // newline emitted below, after the optional §105h fields
                    .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
                    .arg ( iChanID )
                    .arg ( vecChannels[iChanID].GetTelemSession() ) // sess= slot-reuse serial
@@ -1871,7 +1871,10 @@ void CServer::WriteTelemetryV2()
                    .arg ( vecChannels[iChanID].GetFormatChanges() )
                    .arg ( iTelemV2Ticks )                                    // tick= ticks/late>1ms/maxlate_us
                    .arg ( iTelemV2TicksLate1ms )
-                   .arg ( iTelemV2TickMaxLateUs );
+                   .arg ( iTelemV2TickMaxLateUs )
+                   .arg ( static_cast<int> ( vecChannels[iChanID].GetAudioCompressionType() ) ) // codec= CT_NONE/CELT/OPUS/OPUS64 (util.h)
+                   .arg ( vecChannels[iChanID].GetNetwFrameSizeFact() )      // fsz= network frame-size factor
+                   .arg ( vecChannels[iChanID].GetUseSequenceNumber() ? 1 : 0 ); // seqcap= NF_WITH_COUNTER (channel.cpp:456)
 
         // Auto-jitter diagnostic. ON by default since 2026-08-21; JAMULUS_TELEMETRY_AUTODIAG=0 suppresses.
         //

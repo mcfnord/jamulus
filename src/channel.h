@@ -165,6 +165,7 @@ public:
     int GetBufPreFilterDecision() { return SockBuf.GetPreFilterDecision(); }
 
     EAudComprType GetAudioCompressionType() { return eAudioCompressionType; }
+    bool          GetUseSequenceNumber() const { return bUseSequenceNumber; }
     // concealment-rate measurement (PLAN-ADAPTIVE-PLC.md): -1 = no complete window yet
     int GetMeasuredConcealPct() const { return iMeasuredConcealPct.load ( std::memory_order_relaxed ); }
     int GetConcealWindowLen() const { return iConcealWindowLen; }
