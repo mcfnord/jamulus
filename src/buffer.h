@@ -403,10 +403,28 @@ public:
     virtual bool Get ( CVector<uint8_t>& vecbyData, const int iOutSize );
 
     int  GetAutoSetting() { return iCurAutoBufferSizeSetting; }
-    // §105h: the raw per-window decision BEFORE the asymmetric IIR filter. Exposed so an
-    // experiment can separate "the metric never saw the problem" from "the filter
-    // discarded what the metric saw". Read-only; no behaviour change.
+    // §105h: intended as the raw per-window decision BEFORE the asymmetric IIR filter.
+    // IT IS NOT. iCurDecidedResult is assigned once in Init() (buffer.cpp:614) and never
+    // updated, so this returns the constant 6 for the life of the connection — confirmed on
+    // 74,135 production records, every host, every session, 2026-08-25. That is the subject of
+    // upstream issue #3923. Kept because the day it stops returning 6 is the day a fix landed.
     int  GetPreFilterDecision() { return iCurDecidedResult; }
+
+    // The three values UpdateAutoSetting() computes and discards. All genuinely vary, unlike
+    // GetPreFilterDecision() above and unlike the two error bounds (both compile-time
+    // constants). Read-only; no behaviour change; assigned once per window on a path that
+    // already runs there (convention 8: no allocation, no blocking).
+    //
+    // The smoothed FRACTIONAL belief about the right buffer size, e.g. 6.81 blocks. jbuf=6 is
+    // equally consistent with 5.51 and 6.49 — one is a hair from dropping to 5, the other from
+    // jumping to 7 — and the rounded integer erases that distinction entirely.
+    double GetIIRFilterResult() { return dCurIIRFilterResult; }
+    // Buffer size implied by the LOOSER upper error bound. Drives the fast-adaptation booster.
+    int  GetMaxUpDecision() { return iLastMaxUpDecision; }
+    // Whether fast adaptation was engaged this window. NOT derivable from the others: it has
+    // two independent triggers — the init phase (buffer.cpp:732) and the booster
+    // (buffer.cpp:738) — so a caller cannot reconstruct it from jbuf vs GetMaxUpDecision().
+    bool GetUsedFastAdaptation() { return bLastUsedFastAdaptation; }
     void GetErrorRates ( CVector<double>& vecErrRates, double& dLimit, double& dMaxUpLimit );
 
 protected:
@@ -424,6 +442,10 @@ protected:
     int    iInitCounter;
     int    iCurAutoBufferSizeSetting;
     int    iMaxStatisticCount;
+
+    // §105h telemetry mirrors of two UpdateAutoSetting() locals — see the getters above.
+    int    iLastMaxUpDecision;
+    bool   bLastUsedFastAdaptation;
 
     bool   bUseDoubleSystemFrameSize;
     double dAutoFilt_WightUpNormal;

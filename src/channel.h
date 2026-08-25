@@ -163,6 +163,10 @@ public:
 
     // §105h: raw auto decision before IIR filtering (SockBuf is protected, so this forwards).
     int GetBufPreFilterDecision() { return SockBuf.GetPreFilterDecision(); }
+    // §105h: the three values UpdateAutoSetting() otherwise discards — see buffer.h.
+    double GetBufIIRResult() { return SockBuf.GetIIRFilterResult(); }
+    int    GetBufMaxUpDecision() { return SockBuf.GetMaxUpDecision(); }
+    bool   GetBufUsedFastAdaptation() { return SockBuf.GetUsedFastAdaptation(); }
 
     EAudComprType GetAudioCompressionType() { return eAudioCompressionType; }
     bool          GetUseSequenceNumber() const { return bUseSequenceNumber; }

@@ -1884,8 +1884,23 @@ void CServer::WriteTelemetryV2()
         // simerr= is the average error rate of each SIMULATED buffer, sizes 2..11 in order
         // (buffer.cpp viBufSizesForSim), in PARTS PER MILLION so the record stays integer-only.
         // bound= is the algorithm's own decision threshold in the same units (0.0005 -> 500).
-        // dec= is the RAW per-window decision before the asymmetric IIR filter; jbuf= above is
-        // the filtered result actually applied. dec != jbuf is the filter doing its work.
+        //
+        // dec= WAS documented here as "the RAW per-window decision before the asymmetric IIR
+        // filter", with "dec != jbuf is the filter doing its work". BOTH CLAIMS ARE FALSE and
+        // the wrong comment cost real analysis time on 2026-08-25. iCurDecidedResult is assigned
+        // once in Init() and never updated (buffer.cpp:614), so dec= is the constant 6 for the
+        // life of every connection — 74,135 of 74,135 production records, every host, every
+        // session. That is upstream issue #3923. It is kept deliberately: the day dec= stops
+        // reading 6 is the day a fix landed.
+        //
+        // iir= is the value the old comment described: dCurIIRFilterResult, the smoothed
+        // FRACTIONAL belief about the right buffer size, x100 to stay integer (681 = 6.81
+        // blocks). jbuf= is that rounded through the hysteresis, and the rounding hides a lot —
+        // jbuf=6 is equally consistent with 5.51 and 6.49.
+        // upsize= is the buffer size implied by the LOOSER upper error bound, and fast= is
+        // whether fast adaptation was engaged this window. fast= has two independent triggers
+        // (init phase, and jbuf < upsize), so it cannot be reconstructed from the other fields.
+        // The two error BOUNDS are not logged because both are compile-time constants.
         //
         // NOTE ON UNITS, and it is the whole point of the experiment: ErrorRateStatistic is
         // updated on every Put AND every Get, so its denominator is ~2x the block count, while
@@ -1904,10 +1919,13 @@ void CServer::WriteTelemetryV2()
                 strSimErr += ( e ? "," : "" ) + QString::number ( static_cast<int> ( vecErrRates[e] * 1e6 + 0.5 ) );
             }
 
-            out << QString ( " simerr=%1 bound=%2 dec=%3" )
+            out << QString ( " simerr=%1 bound=%2 dec=%3 iir=%4 upsize=%5 fast=%6" )
                        .arg ( strSimErr )
                        .arg ( static_cast<int> ( dLimit * 1e6 + 0.5 ) )
-                       .arg ( vecChannels[iChanID].GetBufPreFilterDecision() );
+                       .arg ( vecChannels[iChanID].GetBufPreFilterDecision() )
+                       .arg ( static_cast<int> ( vecChannels[iChanID].GetBufIIRResult() * 100.0 + 0.5 ) )
+                       .arg ( vecChannels[iChanID].GetBufMaxUpDecision() )
+                       .arg ( vecChannels[iChanID].GetBufUsedFastAdaptation() ? 1 : 0 );
         }
 
         out << "\n";
