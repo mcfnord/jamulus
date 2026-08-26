@@ -1928,6 +1928,16 @@ void CServer::WriteTelemetryV2()
                        .arg ( vecChannels[iChanID].GetBufUsedFastAdaptation() ? 1 : 0 );
         }
 
+        // CONCEALMENT CAUSE (OPEN-TEST-PLANS.md 127k). conceal= above says a block was missing;
+        // this says why its slot was empty. Emitted LAST and unconditionally, so it is purely
+        // additive -- every existing parser reads the fields it already knows and ignores the
+        // tail. Self-checking by construction: never+late+early == conceal='s numerator, because
+        // the three cases partition every non-positive veciBlockValid code (buffer.h).
+        out << QString ( " cc=%1/%2/%3" )                                  // cc= never/late/early
+                   .arg ( vecChannels[iChanID].GetCumConcealNever() )
+                   .arg ( vecChannels[iChanID].GetCumConcealLate() )
+                   .arg ( vecChannels[iChanID].GetCumConcealEarly() );
+
         out << "\n";
     }
 

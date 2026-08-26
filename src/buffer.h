@@ -298,6 +298,34 @@ public:
         iSeqReorder.store ( 0, std::memory_order_relaxed );
     }
 
+    // CONCEALMENT CAUSE (OPEN-TEST-PLANS.md 127k). conceal= says a block was missing at mix
+    // time; it has never said WHY, and five investigations (127f-127j) failed to explain a 46x
+    // per-stream gap on one host from the fields already recorded. These three counters
+    // partition every concealment by the reason its slot was empty, and they are EXACT rather
+    // than a sample: veciBlockValid can only be non-positive for one of exactly three reasons,
+    // set at the three sites that clear it. So never+late+early == the conceal= numerator on
+    // every record, which makes the field self-checking.
+    //
+    // The encoding rides on the existing validity test. Get() reads `veciBlockValid[pos] > 0`,
+    // so every value <= 0 is already "invalid"; the distinct reasons are non-positive codes and
+    // NO BEHAVIOUR CHANGES -- only the value stored in a slot that was going to be invalid
+    // either way. Resizing copies the vector element-wise (Init/Resize below), so the codes
+    // survive a buffer resize for free.
+    static constexpr int iBlockNeverArrived = 0;  // slot never filled: the packet never came
+    static constexpr int iBlockDraggedBack  = -1; // a late packet shifted the window back over it
+    static constexpr int iBlockDraggedFwd   = -2; // an early packet shifted the window past it
+
+    uint32_t GetConcealNeverCount() const { return iConcealNever.load ( std::memory_order_relaxed ); }
+    uint32_t GetConcealLateCount() const { return iConcealLate.load ( std::memory_order_relaxed ); }
+    uint32_t GetConcealEarlyCount() const { return iConcealEarly.load ( std::memory_order_relaxed ); }
+
+    void ResetConcealCause()
+    {
+        iConcealNever.store ( 0, std::memory_order_relaxed );
+        iConcealLate.store ( 0, std::memory_order_relaxed );
+        iConcealEarly.store ( 0, std::memory_order_relaxed );
+    }
+
     // Telemetry v2 (OPEN-TEST-PLANS.md §105c). Two families of counter, both written on the hot
     // paths and read by CServer's telemetry timer, so both are relaxed atomics like the seq stats
     // above -- nothing here orders anything.
@@ -385,6 +413,13 @@ protected:
     std::atomic<uint32_t> iSeqRecv { 0 };
     std::atomic<uint32_t> iSeqLoss { 0 };
     std::atomic<uint32_t> iSeqReorder { 0 };
+
+    // concealment cause; see the accessors above. Simulation buffers never touch these --
+    // CNetBufWithStats runs ten of them per channel and their Get failures are hypothetical,
+    // the same exclusion the run-length counter makes.
+    std::atomic<uint32_t> iConcealNever { 0 };
+    std::atomic<uint32_t> iConcealLate { 0 };
+    std::atomic<uint32_t> iConcealEarly { 0 };
 
     static constexpr int iNumBytesSeqNum = 1; // per definition 1 byte sequence counter
 };

@@ -267,8 +267,9 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
                 // until the received packet is the very first packet in the buffer
                 for ( int i = iSeqNumDiff; i < 0; i++ )
                 {
-                    // insert an invalid block at the shifted position
-                    veciBlockValid[iBlockGetPos] = 0; // invalidate
+                    // insert an invalid block at the shifted position, tagged with WHY it is
+                    // invalid (127k). Still <= 0, so the validity test in Get() is unchanged.
+                    veciBlockValid[iBlockGetPos] = iBlockDraggedBack;
 
                     // we decrease the local sequence number and get position and take care of wrap
                     iSequenceNumberAtGetPos--;
@@ -291,8 +292,8 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
                 // future until the received packet is the last packet in the buffer
                 for ( int i = 0; i < iSeqNumDiff - iNumBlocksMemory + 1; i++ )
                 {
-                    // insert an invalid block at the shifted position
-                    veciBlockValid[iBlockGetPos] = 0; // invalidate
+                    // insert an invalid block at the shifted position, tagged with WHY (127k)
+                    veciBlockValid[iBlockGetPos] = iBlockDraggedFwd;
 
                     // we increase the local sequence number and get position and take care of wrap
                     iSequenceNumberAtGetPos++;
@@ -400,8 +401,29 @@ bool CNetBuf::Get ( CVector<uint8_t>& vecbyData, const int iOutSize )
     {
         bReturn = ( veciBlockValid[iBlockGetPos] > 0 );
 
+        // Attribute the concealment before the slot is cleared (127k). The three codes
+        // partition every possible non-positive value, so these counters sum EXACTLY to the
+        // number of failed Gets -- that identity is the field's own self-check.
+        if ( !bReturn && !bIsSimulation )
+        {
+            switch ( veciBlockValid[iBlockGetPos] )
+            {
+            case iBlockDraggedBack:
+                iConcealLate.fetch_add ( 1, std::memory_order_relaxed );
+                break;
+
+            case iBlockDraggedFwd:
+                iConcealEarly.fetch_add ( 1, std::memory_order_relaxed );
+                break;
+
+            default: // iBlockNeverArrived
+                iConcealNever.fetch_add ( 1, std::memory_order_relaxed );
+                break;
+            }
+        }
+
         // invalidate the block we are now taking from the buffer
-        veciBlockValid[iBlockGetPos] = 0; // zero means invalid
+        veciBlockValid[iBlockGetPos] = iBlockNeverArrived; // consumed: empty until refilled
     }
 
     // for simultion buffer or invalid block only update pointer, no data copying

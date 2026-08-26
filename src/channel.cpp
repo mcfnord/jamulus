@@ -791,6 +791,9 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
                 iCumRunsGE32.fetch_add ( SockBuf.GetRunsGE32(), std::memory_order_relaxed );
                 iCumDragBack.fetch_add ( SockBuf.GetDragBackCount(), std::memory_order_relaxed );
                 iCumDragFwd.fetch_add ( SockBuf.GetDragFwdCount(), std::memory_order_relaxed );
+                iCumConcealNever.fetch_add ( SockBuf.GetConcealNeverCount(), std::memory_order_relaxed );
+                iCumConcealLate.fetch_add ( SockBuf.GetConcealLateCount(), std::memory_order_relaxed );
+                iCumConcealEarly.fetch_add ( SockBuf.GetConcealEarlyCount(), std::memory_order_relaxed );
                 {
                     // run_max is a maximum, not a sum: keep the largest ever seen on this channel
                     const uint32_t iWinMax = SockBuf.GetRunMax();
@@ -801,6 +804,7 @@ EGetDataStat CChannel::GetData ( CVector<uint8_t>& vecbyData, const int iNumByte
                 }
                 SockBuf.ResetRunStats();
                 SockBuf.ResetSeqStats();
+                SockBuf.ResetConcealCause();
 
                 iConcealWindowCount = 0;
                 iConcealFailCount   = 0;

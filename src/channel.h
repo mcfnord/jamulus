@@ -189,6 +189,13 @@ public:
     uint32_t GetCumSeqLost() const { return iCumSeqLost.load ( std::memory_order_relaxed ); }
     uint32_t GetCumSeqSpan() const { return iCumSeqSpan.load ( std::memory_order_relaxed ); }
     uint32_t GetCumSeqReorder() const { return iCumSeqReorder.load ( std::memory_order_relaxed ); }
+
+    // Concealment cause (127k): the same concealment total as GetCumConcealFails(), split by
+    // WHY the slot was empty. never+late+early == GetCumConcealFails() on every sample, which
+    // is what makes the emitted field self-checking rather than merely plausible.
+    uint32_t GetCumConcealNever() const { return iCumConcealNever.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumConcealLate() const { return iCumConcealLate.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumConcealEarly() const { return iCumConcealEarly.load ( std::memory_order_relaxed ); }
     uint32_t GetCumRuns() const { return iCumRuns.load ( std::memory_order_relaxed ); }
     uint32_t GetCumRunSum() const { return iCumRunSum.load ( std::memory_order_relaxed ); }
     uint32_t GetCumRunsGE32() const { return iCumRunsGE32.load ( std::memory_order_relaxed ); }
@@ -242,6 +249,9 @@ public:
         iCumSeqLost.store ( 0, std::memory_order_relaxed );
         iCumSeqSpan.store ( 0, std::memory_order_relaxed );
         iCumSeqReorder.store ( 0, std::memory_order_relaxed );
+        iCumConcealNever.store ( 0, std::memory_order_relaxed );
+        iCumConcealLate.store ( 0, std::memory_order_relaxed );
+        iCumConcealEarly.store ( 0, std::memory_order_relaxed );
         iCumRuns.store ( 0, std::memory_order_relaxed );
         iCumRunSum.store ( 0, std::memory_order_relaxed );
         iCumRunsGE32.store ( 0, std::memory_order_relaxed );
@@ -361,6 +371,9 @@ protected:
     std::atomic<uint32_t> iCumSeqLost { 0 };
     std::atomic<uint32_t> iCumSeqSpan { 0 };
     std::atomic<uint32_t> iCumSeqReorder { 0 };
+    std::atomic<uint32_t> iCumConcealNever { 0 };
+    std::atomic<uint32_t> iCumConcealLate { 0 };
+    std::atomic<uint32_t> iCumConcealEarly { 0 };
     std::atomic<uint32_t> iCumRuns { 0 };
     std::atomic<uint32_t> iCumRunSum { 0 };
     std::atomic<uint32_t> iCumRunsGE32 { 0 };
