@@ -311,6 +311,10 @@ CServer::CServer ( const int          iNewMaxNumChan,
     // touch the environment (convention 8).
     bTelemV2AutoDiag = ( qEnvironmentVariable ( "JAMULUS_TELEMETRY_AUTODIAG", "1" ) != "0" );
 
+    // srv= process instance id, stamped ONCE here (never in the emit path -- convention 8).
+    // See server.h for why the record needs it: sess= restarts at 0 in every new process.
+    iTelemV2ServerId = QDateTime::currentSecsSinceEpoch();
+
     if ( bTelemV2AutoDiag )
     {
         qInfo() << "telemetry-v2: auto-jitter diagnostic ON (simerr=/bound=/dec= per record)";
@@ -1929,14 +1933,20 @@ void CServer::WriteTelemetryV2()
         }
 
         // CONCEALMENT CAUSE (OPEN-TEST-PLANS.md 127k). conceal= above says a block was missing;
-        // this says why its slot was empty. Emitted LAST and unconditionally, so it is purely
-        // additive -- every existing parser reads the fields it already knows and ignores the
-        // tail. Self-checking by construction: never+late+early == conceal='s numerator, because
-        // the three cases partition every non-positive veciBlockValid code (buffer.h).
+        // this says why its slot was empty. Self-checking by construction:
+        // never+late+early == conceal='s numerator, because the three cases partition every
+        // non-positive veciBlockValid code (buffer.h).
         out << QString ( " cc=%1/%2/%3" )                                  // cc= never/late/early
                    .arg ( vecChannels[iChanID].GetCumConcealNever() )
                    .arg ( vecChannels[iChanID].GetCumConcealLate() )
                    .arg ( vecChannels[iChanID].GetCumConcealEarly() );
+
+        // srv= goes LAST, after every optional group and after cc=, so it is purely additive: a
+        // parser anchored on the fixed record prefix still matches, and every optional tail
+        // (codec=/fsz=/seqcap=, simerr=/bound=/dec=, cc=) is found by search, not by position.
+        // Two fields both documented as "last" is exactly how a record format rots, so the
+        // order is fixed here deliberately: srv= terminates the record, cc= precedes it.
+        out << QString ( " srv=%1" ).arg ( iTelemV2ServerId );
 
         out << "\n";
     }
