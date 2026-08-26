@@ -1909,13 +1909,13 @@ void CServer::WriteTelemetryV2()
             for ( int i = 1; i < sl.size(); i++ ) iCpuTot += sl[i].toULongLong();
             if ( sl.size() > 8 ) iCpuSteal = sl[8].toULongLong();
         }
+        // Loop on readLine() returning data, NOT on atEnd(): procfs files stat as size 0, so
+        // QFile::atEnd() is true immediately after open and an atEnd()-gated loop never runs —
+        // rss= read 0 on every emit of the first canary build (measured 2026-08-26, JAMFAN-20).
         QFile fStatus ( "/proc/self/status" );
         if ( fStatus.open ( QIODevice::ReadOnly ) )
-            while ( !fStatus.atEnd() )
-            {
-                const QByteArray l = fStatus.readLine();
+            for ( QByteArray l = fStatus.readLine(); !l.isEmpty(); l = fStatus.readLine() )
                 if ( l.startsWith ( "VmRSS:" ) ) { iRssKb = QString ( l ).remove ( "VmRSS:" ).remove ( "kB" ).trimmed().toLongLong(); break; }
-            }
         QFile fLoad ( "/proc/loadavg" );
         if ( fLoad.open ( QIODevice::ReadOnly ) ) { double d = 0.0; QTextStream ( &fLoad ) >> d; iLoad100 = static_cast<int> ( d * 100.0 + 0.5 ); }
 
