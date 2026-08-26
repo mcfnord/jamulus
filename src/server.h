@@ -136,6 +136,7 @@ public:
               const bool         bNDisconnectAllClientsOnQuit,
               const bool         bNUseDoubleSystemFrameSize,
               const bool         bNDisableRaw,
+              const bool         bNRecordRawOnly,
               const bool         bNUseMultithreading,
               const bool         bDisableRecording,
               const bool         bNDelayPan,
@@ -314,6 +315,21 @@ protected:
     CVector<int>              vecNumFrameSizeConvBlocks;
     CVector<int>              vecUseDoubleSysFraSizeConvBuf;
     CVector<EAudComprType>    vecAudioComprType;
+
+    // Per-channel raw(PCM)-audio flag, indexed by channel ID. The server already derives this
+    // on every decoded block (by payload size) and used to discard it; telemetry v2's raw=
+    // field reads it. Kept as int, not bool: CVector is used with plain value types throughout.
+    CVector<int> vecChanIsRawAudio;
+
+    // --recordrawonly: when true, only raw(PCM) channels are handed to the recorder.
+    bool bRecordRawOnly;
+
+    // What THIS channel should be told the recorder is doing. Under --recordrawonly an OPUS
+    // channel is never written, so it must never be shown the recording banner either -- the
+    // banner is a statement about that user, not about the server. Returns the server-wide
+    // state for every other configuration, so default behaviour is untouched.
+    ERecorderState RecorderStateForChannel ( const int iChID );
+    void           SendRecorderStateToChannel ( const int iChID );
     CVector<CVector<int16_t>> vecvecsSendData;
     CVector<CVector<float>>   vecvecfIntermediateProcBuf;
     CVector<CVector<uint8_t>> vecvecbyCodedData;

@@ -68,6 +68,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
                    const bool         bNDisconnectAllClientsOnQuit,
                    const bool         bNUseDoubleSystemFrameSize,
                    const bool         bNDisableRaw,
+                   const bool         bNRecordRawOnly,
                    const bool         bNUseMultithreading,
                    const bool         bDisableRecording,
                    const bool         bNDelayPan,
@@ -79,6 +80,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
     m_iPort ( iPortNumber ),
     iCurNumChannels ( 0 ),
     bDisableRaw ( bNDisableRaw ),
+    bRecordRawOnly ( bNRecordRawOnly ),
     Socket ( this, iPortNumber, iQosNumber, strServerBindIP, bNEnableIPv6 ),
     Logging(),
     iFrameCount ( 0 ),
@@ -194,6 +196,7 @@ CServer::CServer ( const int          iNewMaxNumChan,
     vecNumFrameSizeConvBlocks.Init ( iMaxNumChannels );
     vecUseDoubleSysFraSizeConvBuf.Init ( iMaxNumChannels );
     vecAudioComprType.Init ( iMaxNumChannels );
+    vecChanIsRawAudio.Init ( iMaxNumChannels, 0 );
 
     for ( i = 0; i < iMaxNumChannels; i++ )
     {
@@ -551,6 +554,12 @@ void CServer::OnNewConnection ( int iChID, int iTotChans, CHostAddress RecHostAd
     // must be the first message to be sent for a new connection)
     vecChannels[iChID].CreateClientIDMes ( iChID );
 
+    // if not disabled, inform the client that the server supports raw (uncompressed) audio
+    if ( !bDisableRaw )
+    {
+        vecChannels[iChID].CreateRawAudioSupportedMes();
+    }
+
     // Send an empty channel list in order to force clients to reset their
     // audio mixer state. This is required to trigger clients to re-send their
     // gain levels upon reconnecting after server restarts.
@@ -611,7 +620,7 @@ void CServer::OnNewConnection ( int iChID, int iTotChans, CHostAddress RecHostAd
     vecChannels[iChID].CreateVersionAndOSMes();
 
     // send recording state message on connection
-    vecChannels[iChID].CreateRecorderStateMes ( m_bExternalRecordingBanner ? RS_RECORDING : JamController.GetRecorderState() );
+    vecChannels[iChID].CreateRecorderStateMes ( RecorderStateForChannel ( iChID ) );
 
     // reset the conversion buffers
     DoubleFrameSizeConvBufIn[iChID].Reset();
@@ -910,8 +919,21 @@ void CServer::OnTimer()
                 ConnLessProtocol.CreateCLChannelLevelListMes ( vecChannels[iCurChanID].GetAddress(), vecChannelLevels, iNumClients );
             }
 
-            // export the audio data for recording purpose
-            if ( JamController.GetRecordingEnabled() )
+            // Export the audio data for recording purpose.
+            //
+            // --recordrawonly, OFF BY DEFAULT: normal jamfan recording is UNCHANGED and still
+            // captures every channel. Only a server started with that flag -- a PCM research
+            // server -- drops OPUS channels here. An OPUS channel's samples reaching here
+            // have already been through the client's encoder and this server's decoder, so they
+            // are not a lossless reference and the research programme has no use for them. Gating
+            // HERE rather than deleting later means an OPUS track is never written at all — so
+            // there is nothing to purge, and no reason to show an OPUS user a recording banner or
+            // ask them to opt in to something that does not happen to them.
+            //
+            // Ordering is safe: OnTimer() runs DecodeReceiveDataBlocks (line ~854/871) before
+            // reaching this emit, and that is where vecChanIsRawAudio[] is set, so the flag is
+            // current for this tick rather than one block stale.
+            if ( JamController.GetRecordingEnabled() && ( !bRecordRawOnly || vecChanIsRawAudio[iCurChanID] ) )
             {
                 emit AudioFrame ( iCurChanID,
                                   vecChannels[iCurChanID].GetName(),
@@ -1121,6 +1143,8 @@ void CServer::DecodeReceiveData ( const int iChanCnt, const int iNumClients )
                     emit ClientDisconnected ( iCurChanID ); // TODO do this outside the mutex lock?
                 }
 
+                vecChanIsRawAudio[iCurChanID] = 0; // a reused channel ID must not inherit this
+
                 FreeChannel ( iCurChanID ); // note that the channel is now not in use
 
                 // note that no mutex is needed for this shared resource since it is a
@@ -1154,6 +1178,20 @@ void CServer::DecodeReceiveData ( const int iChanCnt, const int iNumClients )
             // Sizes other than that are considered OPUS coded because those depend on hardcoded sizes in client.h
             const bool bIsRawAudio =
                 ( iCeltNumCodedBytes == static_cast<int> ( sizeof ( int16_t ) * iClientFrameSizeSamples * vecNumAudioChannels[iChanCnt] ) );
+
+            // Publish what this block already knows, so telemetry v2 can report raw= instead of
+            // forcing an analyst to infer PCM from the (coded, chans, fsz) triple -- inference
+            // that a non-standard fixed-size OPUS frame has already defeated once (a 256-byte
+            // gjstress frame is byte-identical in size to raw stereo at 64-sample frames).
+            const int iWasRawAudio        = vecChanIsRawAudio[iCurChanID];
+            vecChanIsRawAudio[iCurChanID] = bIsRawAudio ? 1 : 0;
+
+            // Under --recordrawonly the banner is per-channel and cannot be decided until the
+            // first block reveals the codec, so correct this client the moment that changes.
+            if ( bRecordRawOnly && iWasRawAudio != vecChanIsRawAudio[iCurChanID] )
+            {
+                SendRecorderStateToChannel ( iCurChanID );
+            }
 
             const int iOffset = iB * SYSTEM_FRAME_SIZE_SAMPLES * vecNumAudioChannels[iChanCnt];
 
@@ -1605,7 +1643,7 @@ void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, con
 void CServer::CreateAndSendRecorderStateForAllConChannels()
 {
     // external banner overrides actual recorder state
-    ERecorderState eRecorderState = m_bExternalRecordingBanner ? RS_RECORDING : JamController.GetRecorderState();
+    // NOTE: the state is decided per channel below -- see RecorderStateForChannel().
 
     // now send recorder state to all connected clients
     for ( int i = 0; i < iMaxNumChannels; i++ )
@@ -1613,8 +1651,36 @@ void CServer::CreateAndSendRecorderStateForAllConChannels()
         if ( vecChannels[i].IsConnected() )
         {
             // send message
-            vecChannels[i].CreateRecorderStateMes ( eRecorderState );
+            vecChannels[i].CreateRecorderStateMes ( RecorderStateForChannel ( i ) );
         }
+    }
+}
+
+ERecorderState CServer::RecorderStateForChannel ( const int iChID )
+{
+    const ERecorderState eServerState = m_bExternalRecordingBanner ? RS_RECORDING : JamController.GetRecorderState();
+
+    // Only --recordrawonly makes the answer per-channel. Everywhere else every client is told
+    // the same thing, exactly as before.
+    if ( !bRecordRawOnly || eServerState != RS_RECORDING )
+    {
+        return eServerState;
+    }
+
+    // An OPUS channel is not being recorded, so say so. Note vecChanIsRawAudio[] is only known
+    // once audio blocks have actually been decoded for this channel: at connect time it reads 0,
+    // so a raw client is told NOT_ENABLED for the first tick and then corrected by
+    // SendRecorderStateToChannel() the moment its first raw block arrives. Erring in this
+    // direction is deliberate -- a late banner is a cosmetic delay, an early one is a false
+    // statement to someone who is not being recorded.
+    return vecChanIsRawAudio[iChID] ? RS_RECORDING : RS_NOT_ENABLED;
+}
+
+void CServer::SendRecorderStateToChannel ( const int iChID )
+{
+    if ( vecChannels[iChID].IsConnected() )
+    {
+        vecChannels[iChID].CreateRecorderStateMes ( RecorderStateForChannel ( iChID ) );
     }
 }
 
@@ -1847,7 +1913,7 @@ void CServer::WriteTelemetryV2()
 
         out << QString ( "t2 %1 ch=%2 sess=%3 conceal=%4/%5 seq=%6/%7 reord=%8 runs=%9 runsum=%10 runge32=%11 runmax=%12 "
                          "drag=%13/%14 jbuf=%15 auto=%16 coded=%17 chans=%18 conn=%19 hw=%20 "
-                         "gap=%21 aud=%22/%23 peak=%24 fmtchg=%25 tick=%26/%27/%28 codec=%29 fsz=%30 seqcap=%31" )   // newline emitted below, after the optional §105h fields
+                         "gap=%21 aud=%22/%23 peak=%24 fmtchg=%25 tick=%26/%27/%28 codec=%29 fsz=%30 seqcap=%31 raw=%32" )   // newline emitted below, after the optional §105h fields
                    .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
                    .arg ( iChanID )
                    .arg ( vecChannels[iChanID].GetTelemSession() ) // sess= slot-reuse serial
@@ -1878,7 +1944,12 @@ void CServer::WriteTelemetryV2()
                    .arg ( iTelemV2TickMaxLateUs )
                    .arg ( static_cast<int> ( vecChannels[iChanID].GetAudioCompressionType() ) ) // codec= CT_NONE/CELT/OPUS/OPUS64 (util.h)
                    .arg ( vecChannels[iChanID].GetNetwFrameSizeFact() )      // fsz= network frame-size factor
-                   .arg ( vecChannels[iChanID].GetUseSequenceNumber() ? 1 : 0 ); // seqcap= NF_WITH_COUNTER (channel.cpp:456)
+                   .arg ( vecChannels[iChanID].GetUseSequenceNumber() ? 1 : 0 )  // seqcap= NF_WITH_COUNTER (channel.cpp:456)
+                   .arg ( vecChanIsRawAudio[iChanID] );                           // raw= 1 = uncompressed PCM, 0 = OPUS
+        // WHY raw= EXISTS: codec= CANNOT answer this. It reports GetAudioCompressionType(), and
+        // eAudioCompressionType is only ever assigned CT_OPUS/CT_OPUS64 (client.cpp:1320-1338) --
+        // the AQ_RAW branch nulls the encoder/decoder and changes the byte count but never sets
+        // CT_NONE. A raw session therefore reports codec=2 or codec=3 and looks entirely normal.
 
         // Auto-jitter diagnostic. ON by default since 2026-08-21; JAMULUS_TELEMETRY_AUTODIAG=0 suppresses.
         //

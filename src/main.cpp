@@ -110,6 +110,7 @@ int main ( int argc, char** argv )
     bool         bUseDoubleSystemFrameSize   = true; // default is 128 samples frame size
     bool         bUseMultithreading          = false;
     bool         bDisableRaw                 = false;
+    bool         bRecordRawOnly              = false;
     bool         bShowAnalyzerConsole        = false;
     bool         bMuteStream                 = false;
     bool         bMuteMeInPersonalMix        = false;
@@ -511,6 +512,24 @@ int main ( int argc, char** argv )
             qInfo() << "- raw audio is disabled";
             CommandLineOptions << "--noraw";
             ServerOnlyOptions << "--noraw";
+            continue;
+        }
+
+        // Record only raw (PCM) channels -------------------------------------
+        // OFF by default: plain --recording keeps recording EVERY channel, exactly as before.
+        // Opt in on a research server, where an OPUS track is not wanted at any point --
+        // gating at the capture site means such a track is never written, so there is nothing
+        // to purge afterwards and no reason to prompt an OPUS user about a recording that does
+        // not include them.
+        if ( GetFlagArgument ( argv,
+                               i,
+                               "--recordrawonly", // no short form
+                               "--recordrawonly" ) )
+        {
+            bRecordRawOnly = true;
+            qInfo() << "- recording restricted to raw (PCM) channels";
+            CommandLineOptions << "--recordrawonly";
+            ServerOnlyOptions << "--recordrawonly";
             continue;
         }
 
@@ -1027,6 +1046,7 @@ int main ( int argc, char** argv )
                              bDisconnectAllClientsOnQuit,
                              bUseDoubleSystemFrameSize,
                              bDisableRaw,
+                             bRecordRawOnly,
                              bUseMultithreading,
                              bDisableRecording,
                              bDelayPan,
@@ -1159,6 +1179,7 @@ QString UsageArguments ( char** argv )
            "  -P, --delaypan          start with delay panning enabled\n"
            "  -R, --recording         set server recording directory; server will record when a session is active by default\n"
            "      --norecord          set server not to record by default when recording is configured\n"
+           "      --recordrawonly     record only raw (PCM) channels; OPUS channels are not written\n"
            "      --noraw             disable raw audio\n"
            "  -s, --server            start Server\n"
            "      --serverbindip      IP address the Server will bind to (rather than all)\n"
