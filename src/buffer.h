@@ -442,8 +442,14 @@ public:
     // IT IS NOT. iCurDecidedResult is assigned once in Init() (buffer.cpp:614) and never
     // updated, so this returns the constant 6 for the life of the connection — confirmed on
     // 74,135 production records, every host, every session, 2026-08-25. That is the subject of
-    // upstream issue #3923. Kept because the day it stops returning 6 is the day a fix landed.
+    // upstream issue #3923, and it is kept as that bug's tripwire only — no longer telemetry's
+    // dec= source (TELEMETRY-PLAN.md R1 pointed dec= at GetLastRegularDecision() below instead).
+    // Kept because the day it stops returning 6 is the day a fix landed.
     int  GetPreFilterDecision() { return iCurDecidedResult; }
+    // TELEMETRY-PLAN.md Phase 0/1: the LIVE per-window regular-bound decision (iCurDecision in
+    // UpdateAutoSetting(), buffer.cpp), mirrored the same way as iLastMaxUpDecision below. Unlike
+    // GetPreFilterDecision() above, this one actually varies window to window.
+    int  GetLastRegularDecision() { return iLastRegularDecision; }
 
     // The three values UpdateAutoSetting() computes and discards. All genuinely vary, unlike
     // GetPreFilterDecision() above and unlike the two error bounds (both compile-time
@@ -481,6 +487,8 @@ protected:
     // §105h telemetry mirrors of two UpdateAutoSetting() locals — see the getters above.
     int    iLastMaxUpDecision;
     bool   bLastUsedFastAdaptation;
+    // TELEMETRY-PLAN.md Phase 0/1: third mirror, of iCurDecision — see GetLastRegularDecision().
+    int    iLastRegularDecision;
 
     bool   bUseDoubleSystemFrameSize;
     double dAutoFilt_WightUpNormal;

@@ -635,10 +635,12 @@ void CNetBufWithStats::Init ( const int iNewBlockSize, const int iNewNumBlocks, 
         dCurIIRFilterResult       = iCurAutoBufferSizeSetting;
         iCurDecidedResult         = iCurAutoBufferSizeSetting;
 
-        // §105h telemetry mirrors: initialise so a channel that is read before its first
-        // UpdateAutoSetting() window reports a defined value rather than stack garbage.
+        // §105h/TELEMETRY-PLAN.md telemetry mirrors: initialise so a channel that is read before
+        // its first UpdateAutoSetting() window reports a defined value rather than stack garbage
+        // (or, on a reused buffer, the previous connection's stale last value).
         iLastMaxUpDecision      = iCurAutoBufferSizeSetting;
         bLastUsedFastAdaptation = false;
+        iLastRegularDecision    = iCurAutoBufferSizeSetting;
     }
 }
 
@@ -767,11 +769,12 @@ void CNetBufWithStats::UpdateAutoSetting()
         bUseFastAdaptation = true;
     }
 
-    // §105h telemetry mirrors — capture the two locals AFTER both fast-adaptation triggers have
-    // been evaluated, so bLastUsedFastAdaptation reflects the value actually used below.
-    // Two plain stores; nothing allocates or blocks (convention 8).
+    // §105h/TELEMETRY-PLAN.md telemetry mirrors — capture the locals AFTER both fast-adaptation
+    // triggers have been evaluated, so bLastUsedFastAdaptation reflects the value actually used
+    // below. Three plain stores; nothing allocates or blocks (convention 8).
     iLastMaxUpDecision      = iCurMaxUpDecision;
     bLastUsedFastAdaptation = bUseFastAdaptation;
+    iLastRegularDecision    = iCurDecision;
 
     if ( bUseFastAdaptation )
     {

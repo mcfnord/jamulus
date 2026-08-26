@@ -358,13 +358,18 @@ protected:
     QTimer ConcealTelemetryTimer;
 
     // Telemetry v2 (OPEN-TEST-PLANS.md §105c): a per-channel record every 30 s to a dedicated
-    // file, with a disk cap this server enforces itself. It writes RAW counts, never quotients --
-    // §105b failed precisely because a rounded per-window rate cannot be reconstructed.
+    // file, with a disk cap this server enforces itself. RULE B: a quotient/window sample (e.g.
+    // w=, TELEMETRY-PLAN.md Phase 0) may be added BESIDE an intact raw cumulative count, never
+    // IN PLACE OF one -- §105b failed precisely because a rounded per-window rate replaced the
+    // raw counters and could not be reconstructed after the fact.
     void     WriteTelemetryV2();
     bool     TelemetryV2SpaceOk();
     int      iTelemV2TickCount   = 0;
     qint64   iTelemV2CapBytes    = 0; // decided once at startup from actual free space
     bool     bTelemV2Suspended   = false;
+    // TELEMETRY-PLAN.md Phase 1: count of WriteTelemetryV2() calls that returned without writing
+    // a record (suspended, or the file failed to open) — emitted as skip= in s2.
+    quint64  iTelemV2SkippedPasses = 0;
     // §105h auto-jitter diagnostic. Read ONCE at startup from JAMULUS_TELEMETRY_AUTODIAG so
     // the audio path never touches the environment; default OFF, so a normal fleet build
     // emits the unchanged record.

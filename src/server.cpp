@@ -1863,6 +1863,7 @@ void CServer::WriteTelemetryV2()
             bTelemV2Suspended = true;
             qInfo() << "telemetry-v2: SUSPENDED (cap reached or filesystem low); no further records";
         }
+        iTelemV2SkippedPasses++;
         return;
     }
 
@@ -1891,10 +1892,48 @@ void CServer::WriteTelemetryV2()
 
     if ( !f.open ( QIODevice::Append | QIODevice::Text ) )
     {
+        iTelemV2SkippedPasses++;
         return;
     }
 
     QTextStream out ( &f );
+
+    // s2: one server-wide line per pass (TELEMETRY-PLAN.md Phase 1). Host context is RAW
+    // cumulative jiffies, differenced by the consumer — same form fleetwatch uses.
+    {
+        quint64 iCpuTot = 0, iCpuSteal = 0; qint64 iRssKb = 0; int iLoad100 = 0;
+        QFile fStat ( "/proc/stat" );
+        if ( fStat.open ( QIODevice::ReadOnly ) )
+        {
+            const QStringList sl = QString ( fStat.readLine() ).simplified().split ( ' ' );
+            for ( int i = 1; i < sl.size(); i++ ) iCpuTot += sl[i].toULongLong();
+            if ( sl.size() > 8 ) iCpuSteal = sl[8].toULongLong();
+        }
+        QFile fStatus ( "/proc/self/status" );
+        if ( fStatus.open ( QIODevice::ReadOnly ) )
+            while ( !fStatus.atEnd() )
+            {
+                const QByteArray l = fStatus.readLine();
+                if ( l.startsWith ( "VmRSS:" ) ) { iRssKb = QString ( l ).remove ( "VmRSS:" ).remove ( "kB" ).trimmed().toLongLong(); break; }
+            }
+        QFile fLoad ( "/proc/loadavg" );
+        if ( fLoad.open ( QIODevice::ReadOnly ) ) { double d = 0.0; QTextStream ( &fLoad ) >> d; iLoad100 = static_cast<int> ( d * 100.0 + 0.5 ); }
+
+        out << QString ( "s2 %1 srv=%2 nconn=%3 hw=%4 tick=%5/%6/%7 cfg=%8/%9/%10/%11 cpu=%12,%13 rss=%14 load=%15 skip=%16\n" )
+                   .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
+                   .arg ( iTelemV2ServerId )
+                   .arg ( GetNumberOfConnectedClients() )
+                   .arg ( iTelemV2HighWater )
+                   .arg ( iTelemV2Ticks ).arg ( iTelemV2TicksLate1ms ).arg ( iTelemV2TickMaxLateUs )
+                   .arg ( bUseDoubleSystemFrameSize ? 1 : 0 )
+                   .arg ( bUseMultithreading ? 1 : 0 )
+                   .arg ( iMaxNumThreads )
+                   .arg ( iMaxNumChannels )
+                   .arg ( iCpuTot ).arg ( iCpuSteal )
+                   .arg ( iRssKb )
+                   .arg ( iLoad100 )
+                   .arg ( iTelemV2SkippedPasses );
+    }
 
     for ( int iChanID = 0; iChanID < iMaxNumChannels; iChanID++ )
     {
@@ -1962,11 +2001,15 @@ void CServer::WriteTelemetryV2()
         //
         // dec= WAS documented here as "the RAW per-window decision before the asymmetric IIR
         // filter", with "dec != jbuf is the filter doing its work". BOTH CLAIMS ARE FALSE and
-        // the wrong comment cost real analysis time on 2026-08-25. iCurDecidedResult is assigned
-        // once in Init() and never updated (buffer.cpp:614), so dec= is the constant 6 for the
+        // the wrong comment cost real analysis time on 2026-08-25: iCurDecidedResult is assigned
+        // once in Init() and never updated (buffer.cpp:614), so it reads the constant 6 for the
         // life of every connection — 74,135 of 74,135 production records, every host, every
-        // session. That is upstream issue #3923. It is kept deliberately: the day dec= stops
-        // reading 6 is the day a fix landed.
+        // session. That is upstream issue #3923, and GetBufPreFilterDecision() is kept as its
+        // tripwire only — the day it stops reading 6 is the day a fix landed.
+        //
+        // dec= itself was repointed at GetBufLastRegularDecision() (TELEMETRY-PLAN.md R1), the
+        // LIVE per-window regular-bound decision (iCurDecision), so it now actually varies and
+        // "dec != jbuf is the filter doing its work" is true again — for this field, not #3923's.
         //
         // iir= is the value the old comment described: dCurIIRFilterResult, the smoothed
         // FRACTIONAL belief about the right buffer size, x100 to stay integer (681 = 6.81
@@ -1997,11 +2040,22 @@ void CServer::WriteTelemetryV2()
             out << QString ( " simerr=%1 bound=%2 dec=%3 iir=%4 upsize=%5 fast=%6" )
                        .arg ( strSimErr )
                        .arg ( static_cast<int> ( dLimit * 1e6 + 0.5 ) )
-                       .arg ( vecChannels[iChanID].GetBufPreFilterDecision() )
+                       .arg ( vecChannels[iChanID].GetBufLastRegularDecision() )
                        .arg ( static_cast<int> ( vecChannels[iChanID].GetBufIIRResult() * 100.0 + 0.5 ) )
                        .arg ( vecChannels[iChanID].GetBufMaxUpDecision() )
                        .arg ( vecChannels[iChanID].GetBufUsedFastAdaptation() ? 1 : 0 );
         }
+
+        // Phase 0 (TELEMETRY-PLAN.md): window snapshot + config the cumulative fields can't carry.
+        // w= is the LATEST completed window (cwin blocks), integer pct — a sample, not a summary;
+        // the raw cumulative fields above remain the record of precision.
+        out << QString ( " cwin=%1 w=%2/%3/%4 kbps=%5 autoset=%6" )
+                   .arg ( vecChannels[iChanID].GetConcealWindowLen() )
+                   .arg ( vecChannels[iChanID].GetMeasuredConcealPct() )
+                   .arg ( vecChannels[iChanID].GetMeasuredSeqLossPct() )
+                   .arg ( vecChannels[iChanID].GetMeasuredSeqRecv() )
+                   .arg ( vecChannels[iChanID].GetUploadRateKbps() )
+                   .arg ( vecChannels[iChanID].GetBufAutoSetting() );
 
         // CONCEALMENT CAUSE (OPEN-TEST-PLANS.md 127k). conceal= above says a block was missing;
         // this says why its slot was empty. Self-checking by construction:

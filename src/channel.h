@@ -167,6 +167,11 @@ public:
     double GetBufIIRResult() { return SockBuf.GetIIRFilterResult(); }
     int    GetBufMaxUpDecision() { return SockBuf.GetMaxUpDecision(); }
     bool   GetBufUsedFastAdaptation() { return SockBuf.GetUsedFastAdaptation(); }
+    // TELEMETRY-PLAN.md Phase 0/1: the live per-window regular decision (buffer.cpp
+    // iCurDecision), unlike the frozen GetBufPreFilterDecision() above — see buffer.h.
+    int GetBufLastRegularDecision() { return SockBuf.GetLastRegularDecision(); }
+    // TELEMETRY-PLAN.md Phase 0: the current jitter-buffer auto-setting (SockBuf is protected).
+    int GetBufAutoSetting() { return SockBuf.GetAutoSetting(); }
 
     EAudComprType GetAudioCompressionType() { return eAudioCompressionType; }
     bool          GetUseSequenceNumber() const { return bUseSequenceNumber; }
