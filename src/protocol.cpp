@@ -848,6 +848,10 @@ void CProtocol::ParseMessageBody ( const CVector<uint8_t>& vecbyMesBodyData, con
                     EvaluatePlcAbTelemetryMes ( vecbyMesBodyDataRef );
                     break;
 
+                case PROTMESSID_CLIENT_TELEMETRY:
+                    EvaluateClientTelemetryMes ( vecbyMesBodyDataRef );
+                    break;
+
                 case PROTMESSID_LICENCE_REQUIRED:
                     EvaluateLicenceRequiredMes ( vecbyMesBodyDataRef );
                     break;
@@ -1637,6 +1641,79 @@ bool CProtocol::EvaluatePlcAbTelemetryMes ( const CVector<uint8_t>& vecData )
                                       .arg ( iBlocksCum )
                                       .arg ( iClipCum )
                                       .arg ( iWinRaw == 255 ? -1 : iWinRaw ) );
+
+    return false; // no error
+}
+
+// TEST-ONLY (client-telemetry, Step 1, PLAN-CLIENT-TELEMETRY.md): downlink mirror of the
+// server's t2 counters. 53 bytes fixed: ver(1) seq(4) uptime(4) then 11 cumulative u32
+// counters (44). Receiver only on the fleet build; sender is env-gated
+// (JAMULUS_CLIENT_TELEMETRY=1) on the client so one binary serves both roles.
+void CProtocol::CreateClientTelemetryMes ( const CClientTelemetry& Tlm )
+{
+    CVector<uint8_t> vecData ( 53 );
+    int              iPos = 0; // init position pointer
+
+    PutValOnStream ( vecData, iPos, 1, 1 ); // wire format version
+    PutValOnStream ( vecData, iPos, Tlm.iSeq, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iUptimeSecs, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iConcealFailsCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iConcealBlocksCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iSeqLostCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iSeqSpanCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iSeqReorderCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iRunsCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iRunSumCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iRunsGE32Cum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iRunMaxCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iDragBackCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iDragFwdCum, 4 );
+
+    CreateAndSendMessage ( PROTMESSID_CLIENT_TELEMETRY, vecData );
+}
+
+bool CProtocol::EvaluateClientTelemetryMes ( const CVector<uint8_t>& vecData )
+{
+    int iPos = 0; // init position pointer
+
+    if ( vecData.Size() != 53 )
+    {
+        return true; // return error code
+    }
+
+    if ( GetValFromStream ( vecData, iPos, 1 ) != 1 )
+    {
+        return true; // unknown wire format version
+    }
+
+    const uint32_t iSeq        = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iUptimeSecs = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iConcFails  = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iConcBlocks = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iSeqLost    = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iSeqSpan    = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iSeqReorder = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iRuns       = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iRunSum     = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iRunsGE32   = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iRunMax     = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iDragBack   = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+    const uint32_t iDragFwd    = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+
+    emit ClientTelemetryReceived ( QString ( "seq=%1 up=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runs=%8 runsum=%9 runge32=%10 runmax=%11 drag=%12/%13" )
+                                        .arg ( iSeq )
+                                        .arg ( iUptimeSecs )
+                                        .arg ( iConcFails )
+                                        .arg ( iConcBlocks )
+                                        .arg ( iSeqLost )
+                                        .arg ( iSeqSpan )
+                                        .arg ( iSeqReorder )
+                                        .arg ( iRuns )
+                                        .arg ( iRunSum )
+                                        .arg ( iRunsGE32 )
+                                        .arg ( iRunMax )
+                                        .arg ( iDragBack )
+                                        .arg ( iDragFwd ) );
 
     return false; // no error
 }

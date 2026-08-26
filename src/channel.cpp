@@ -115,6 +115,7 @@ CChannel::CChannel ( const bool bNIsServer ) :
 
     // TEST-ONLY (plc-ab-tester)
     QObject::connect ( &Protocol, &CProtocol::PlcAbTelemetryReceived, this, &CChannel::PlcAbTelemetryReceived );
+    QObject::connect ( &Protocol, &CProtocol::ClientTelemetryReceived, this, &CChannel::ClientTelemetryReceived );
 
     QObject::connect ( &Protocol, &CProtocol::NetTranspPropsReceived, this, &CChannel::OnNetTranspPropsReceived );
 

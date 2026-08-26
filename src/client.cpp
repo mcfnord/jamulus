@@ -279,6 +279,25 @@ CClient::CClient ( const quint16  iPortNumber,
                                          .arg ( iPlcAbTlmSecs ) );
     }
 
+    // TEST-ONLY (client-telemetry, Step 1): opt-in, off unless JAMULUS_CLIENT_TELEMETRY=1
+    {
+        const char* pEnv;
+        if ( ( pEnv = getenv ( "JAMULUS_CLIENT_TELEMETRY" ) ) && ( atoi ( pEnv ) == 1 ) )
+        {
+            bClientTelemetryEnabled = true;
+        }
+        if ( ( pEnv = getenv ( "JAM_CLIENT_TLM_SECS" ) ) && ( atoi ( pEnv ) > 0 ) )
+        {
+            iClientTelemetrySecs = atoi ( pEnv );
+        }
+
+        QObject::connect ( &TimerClientTelemetry, &QTimer::timeout, this, &CClient::OnTimerClientTelemetry );
+
+        qDebug() << qUtf8Printable ( QString ( "[CLIENTTLM] config enabled=%1 tlm_secs=%2" )
+                                         .arg ( bClientTelemetryEnabled )
+                                         .arg ( iClientTelemetrySecs ) );
+    }
+
     // start the socket (it is important to start the socket after all
     // initializations and connections)
     Socket.Start();
@@ -655,6 +674,48 @@ void CClient::OnTimerPlcAbTelemetry()
                                      .arg ( Tlm.iBlocksCum )
                                      .arg ( Tlm.iClipCum )
                                      .arg ( Tlm.iConcealPctWin ) );
+}
+
+// TEST-ONLY (client-telemetry, Step 1, PLAN-CLIENT-TELEMETRY.md): serialize the downlink
+// counters CChannel is already accumulating (GetData(), ungated on bIsServer) and send them
+// over the ACKed FIFO -- R-T1 validated that path holds up under loss without an unbounded
+// queue buildup. This is the whole message: no new measurement, only serialization.
+void CClient::OnTimerClientTelemetry()
+{
+    if ( !Channel.IsConnected() )
+    {
+        return;
+    }
+
+    CClientTelemetry Tlm;
+    Tlm.iSeq              = iClientTelemetrySeq++;
+    Tlm.iUptimeSecs        = static_cast<uint32_t> ( ClientTelemetryUptime.elapsed() / 1000 );
+    Tlm.iConcealFailsCum   = Channel.GetCumConcealFails();
+    Tlm.iConcealBlocksCum  = Channel.GetCumConcealBlocks();
+    Tlm.iSeqLostCum        = Channel.GetCumSeqLost();
+    Tlm.iSeqSpanCum        = Channel.GetCumSeqSpan();
+    Tlm.iSeqReorderCum     = Channel.GetCumSeqReorder();
+    Tlm.iRunsCum           = Channel.GetCumRuns();
+    Tlm.iRunSumCum         = Channel.GetCumRunSum();
+    Tlm.iRunsGE32Cum       = Channel.GetCumRunsGE32();
+    Tlm.iRunMaxCum         = Channel.GetCumRunMax();
+    Tlm.iDragBackCum       = Channel.GetCumDragBack();
+    Tlm.iDragFwdCum        = Channel.GetCumDragFwd();
+
+    Channel.CreateClientTelemetryMes ( Tlm );
+
+    // local copy of the same record, so a headless run needs no server access
+    qDebug() << qUtf8Printable ( QString ( "[CLIENTTLM] tlm seq=%1 up=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runmax=%8 drag=%9/%10" )
+                                     .arg ( Tlm.iSeq )
+                                     .arg ( Tlm.iUptimeSecs )
+                                     .arg ( Tlm.iConcealFailsCum )
+                                     .arg ( Tlm.iConcealBlocksCum )
+                                     .arg ( Tlm.iSeqLostCum )
+                                     .arg ( Tlm.iSeqSpanCum )
+                                     .arg ( Tlm.iSeqReorderCum )
+                                     .arg ( Tlm.iRunMaxCum )
+                                     .arg ( Tlm.iDragBackCum )
+                                     .arg ( Tlm.iDragFwdCum ) );
 }
 
 void CClient::OnTimerRemoteChanGainOrPan()
@@ -1194,6 +1255,18 @@ void CClient::Start()
         TimerPlcAbTelemetry.start ( iPlcAbTlmSecs * 1000 );
     }
 
+    // TEST-ONLY (client-telemetry, Step 1): fresh sequence numbering per session; the
+    // counters themselves (GetCumConcealFails() etc.) are never reset -- CChannel resets them
+    // only via ResetConcealCumCounters() above, which is a DIFFERENT counter family (the
+    // plc-ab-specific iConcealFailsCum/iConcealBlocksCum, not the t2-twin iCumConceal* this
+    // message reports).
+    if ( bClientTelemetryEnabled )
+    {
+        iClientTelemetrySeq = 0;
+        ClientTelemetryUptime.start();
+        TimerClientTelemetry.start ( iClientTelemetrySecs * 1000 );
+    }
+
     // enable channel
     Channel.SetEnable ( true );
 
@@ -1211,6 +1284,9 @@ void CClient::Stop()
     // TEST-ONLY (plc-ab-tester)
     TimerPlcAb.stop();
     TimerPlcAbTelemetry.stop();
+
+    // TEST-ONLY (client-telemetry, Step 1)
+    TimerClientTelemetry.stop();
 
     // stop audio interface
     Sound.Stop();

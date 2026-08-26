@@ -463,6 +463,8 @@ inline void CServer::connectChannelSignalsToServerSlots()
 
     void ( CServer::*pOnPlcAbTelemetryReceivedCh ) ( QString ) = &CServerSlots<slotId>::OnPlcAbTelemetryReceivedCh; // TEST-ONLY
 
+    void ( CServer::*pOnClientTelemetryReceivedCh ) ( QString ) = &CServerSlots<slotId>::OnClientTelemetryReceivedCh; // TEST-ONLY
+
     void ( CServer::*pOnMuteStateHasChangedCh ) ( int, bool ) = &CServerSlots<slotId>::OnMuteStateHasChangedCh;
 
     void ( CServer::*pOnServerAutoSockBufSizeChangeCh ) ( int ) = &CServerSlots<slotId>::OnServerAutoSockBufSizeChangeCh;
@@ -493,6 +495,9 @@ inline void CServer::connectChannelSignalsToServerSlots()
 
     // TEST-ONLY (plc-ab-tester): A/B field-trial telemetry received
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::PlcAbTelemetryReceived, this, pOnPlcAbTelemetryReceivedCh );
+
+    // TEST-ONLY (client-telemetry, Step 1): downlink mirror of t2 received
+    QObject::connect ( &vecChannels[iCurChanID], &CChannel::ClientTelemetryReceived, this, pOnClientTelemetryReceivedCh );
 
     // other mute state has changed
     QObject::connect ( &vecChannels[iCurChanID], &CChannel::MuteStateHasChanged, this, pOnMuteStateHasChangedCh );
@@ -2099,6 +2104,35 @@ void CServer::LogPlcAbTelemetry ( const int iCurChanID, const QString& strFields
                                      .arg ( vecChannels[iCurChanID].GetName() )
                                      .arg ( vecChannels[iCurChanID].GetMeasuredConcealPct() )
                                      .arg ( strFields ) );
+}
+
+// TEST-ONLY (client-telemetry, Step 1, PLAN-CLIENT-TELEMETRY.md): appends a "c2 " line to the
+// telemetry v2 log on RECEIPT -- not tied to WriteTelemetryV2()'s periodic timer, since the
+// client's own telemetry timer runs on an independent cadence. Uses the same path/space guard
+// as WriteTelemetryV2() so a client telemetry burst cannot bypass the disk-fill protections
+// (burn-in bar, "DISK CANNOT FILL"). strFields is the pre-formatted "seq=... conceal=.../... "
+// payload built in CProtocol::EvaluateClientTelemetryMes -- same division of labour as t2/s2.
+void CServer::LogClientTelemetry ( const int iCurChanID, const QString& strFields )
+{
+    if ( strTelemV2Path.isEmpty() || !TelemetryV2SpaceOk() )
+    {
+        return;
+    }
+
+    QFile f ( strTelemV2Path );
+
+    if ( !f.open ( QIODevice::Append | QIODevice::Text ) )
+    {
+        return;
+    }
+
+    QTextStream out ( &f );
+
+    out << QString ( "c2 %1 ch=%2 sess=%3 %4\n" )
+               .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
+               .arg ( iCurChanID )
+               .arg ( vecChannels[iCurChanID].GetTelemSession() )
+               .arg ( strFields );
 }
 
 void CServer::DumpChannels ( const QString& title )

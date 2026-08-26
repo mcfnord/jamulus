@@ -297,6 +297,13 @@ public:
             Protocol.CreatePlcAbTelemetryMes ( Tlm );
         }
     }
+    void CreateClientTelemetryMes ( const CClientTelemetry& Tlm ) // TEST-ONLY (client-telemetry, Step 1)
+    {
+        if ( ProtocolIsEnabled() )
+        {
+            Protocol.CreateClientTelemetryMes ( Tlm );
+        }
+    }
     int           GetNumAudioChannels() const { return iNumAudioChannels; }
 
     // network protocol interface
@@ -485,6 +492,7 @@ signals:
     void ReqChanInfo();
     void ChatTextReceived ( QString strChatText );
     void PlcAbTelemetryReceived ( QString strFields ); // TEST-ONLY (plc-ab-tester)
+    void ClientTelemetryReceived ( QString strFields ); // TEST-ONLY (client-telemetry, Step 1)
     void ReqNetTranspProps();
     void LicenceRequired ( ELicenceType eLicenceType );
     void VersionAndOSReceived ( COSUtil::EOpSystemType eOSType, QString strVersion );

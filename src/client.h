@@ -493,6 +493,20 @@ protected:
     void OnTimerPlcAb();
     void OnTimerPlcAbTelemetry();
 
+    // TEST-ONLY (client-telemetry, Step 1, PLAN-CLIENT-TELEMETRY.md): downlink mirror of the
+    // server's t2 counters, sent over the same ACKed-FIFO mechanism as TimerPlcAbTelemetry
+    // (R-T1 validated that path -- see the plan doc, section 3). Off by default, unlike
+    // plc-ab: this rides a message ID (39) most fleet peers have never seen, so it stays
+    // opt-in until Step 1's symmetry runs are done. Env knobs: JAMULUS_CLIENT_TELEMETRY=1
+    // enables, JAM_CLIENT_TLM_SECS overrides the period (default 10).
+    QTimer                TimerClientTelemetry;
+    QElapsedTimer         ClientTelemetryUptime;
+    int                   iClientTelemetrySecs    = 10;
+    bool                  bClientTelemetryEnabled = false;
+    uint32_t              iClientTelemetrySeq     = 0;
+
+    void OnTimerClientTelemetry();
+
     ChatReporter* m_chatReporter = nullptr;
     int    minGainOrPanId;
     int    maxGainOrPanId;

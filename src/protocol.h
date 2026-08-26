@@ -87,6 +87,10 @@
 #define PROTMESSID_RAWAUDIO_SUPPORTED       36 // raw (uncompressed) audio is supported
 // 37 reserved for PROTMESSID_CONCEAL_RATE (PLAN-ADAPTIVE-PLC.md Step 4)
 #define PROTMESSID_PLC_AB_TELEMETRY         38 // TEST-ONLY (plc-ab-tester): A/B field-trial counters
+#define PROTMESSID_CLIENT_TELEMETRY         39 // TEST-ONLY (client-telemetry, Step 1): downlink
+                                                // mirror of the server's t2 counters, gated
+                                                // JAMULUS_CLIENT_TELEMETRY=1. See
+                                                // PLAN-CLIENT-TELEMETRY.md.
 
 // TEST-ONLY (plc-ab-tester): payload of PROTMESSID_PLC_AB_TELEMETRY.
 // All counters are cumulative since connect, so a report lost beyond the
@@ -106,6 +110,30 @@ struct CPlcAbTelemetry
     uint32_t iBlocksCum;       // downlink blocks requested (denominator)
     uint32_t iClipCum;         // full-scale samples in the decoded output
     int      iConcealPctWin;   // current ~2 s window percentage, -1 = none yet
+};
+
+// TEST-ONLY (client-telemetry, Step 1, PLAN-CLIENT-TELEMETRY.md): payload of
+// PROTMESSID_CLIENT_TELEMETRY. Every counter is the DOWNLINK twin of a t2 field the
+// server already logs for the uplink -- CChannel accumulates all of these on the
+// client side already (channel.cpp GetData(), ungated on bIsServer); this message
+// only serializes them. Cumulative since connect, same contract as CPlcAbTelemetry:
+// a lost report costs nothing, the next one carries the totals. Wire format fixed
+// at 53 bytes, version tag first (1 + 13*4).
+struct CClientTelemetry
+{
+    uint32_t iSeq;              // telemetry message counter
+    uint32_t iUptimeSecs;       // seconds since the client started audio
+    uint32_t iConcealFailsCum;  // t2 conceal= numerator (downlink)
+    uint32_t iConcealBlocksCum; // t2 conceal= denominator (downlink)
+    uint32_t iSeqLostCum;       // t2 seq= numerator (downlink)
+    uint32_t iSeqSpanCum;       // t2 seq= denominator (downlink)
+    uint32_t iSeqReorderCum;    // t2 reord= (downlink)
+    uint32_t iRunsCum;          // t2 runs= (downlink)
+    uint32_t iRunSumCum;        // t2 runsum= (downlink)
+    uint32_t iRunsGE32Cum;      // t2 runge32= (downlink)
+    uint32_t iRunMaxCum;        // t2 runmax= (downlink) -- a MAX, not a sum; server must max-merge
+    uint32_t iDragBackCum;      // t2 drag= back half (downlink)
+    uint32_t iDragFwdCum;       // t2 drag= fwd half (downlink)
 };
 
 // message IDs of connection less messages (CLM)
@@ -167,6 +195,7 @@ public:
     void CreateReqChanInfoMes();
     void CreateChatTextMes ( const QString strChatText );
     void CreatePlcAbTelemetryMes ( const CPlcAbTelemetry& Tlm ); // TEST-ONLY (plc-ab-tester)
+    void CreateClientTelemetryMes ( const CClientTelemetry& Tlm ); // TEST-ONLY (client-telemetry, Step 1)
     void CreateNetwTranspPropsMes ( const CNetworkTransportProps& NetTrProps );
     void CreateReqNetwTranspPropsMes();
     void CreateReqSplitMessSupportMes();
@@ -308,6 +337,7 @@ protected:
     bool EvaluateSplitMessSupportedMes();
     bool EvaluateRawAudioSupportedMes();
     bool EvaluatePlcAbTelemetryMes ( const CVector<uint8_t>& vecData ); // TEST-ONLY (plc-ab-tester)
+    bool EvaluateClientTelemetryMes ( const CVector<uint8_t>& vecData ); // TEST-ONLY (client-telemetry, Step 1)
     bool EvaluateLicenceRequiredMes ( const CVector<uint8_t>& vecData );
     bool EvaluateVersionAndOSMes ( const CVector<uint8_t>& vecData );
     bool EvaluateRecorderStateMes ( const CVector<uint8_t>& vecData );
@@ -374,6 +404,7 @@ signals:
     void SplitMessSupported();
     void RawAudioSupported();
     void PlcAbTelemetryReceived ( QString strFields ); // TEST-ONLY (plc-ab-tester)
+    void ClientTelemetryReceived ( QString strFields ); // TEST-ONLY (client-telemetry, Step 1)
     void LicenceRequired ( ELicenceType eLicenceType );
     void VersionAndOSReceived ( COSUtil::EOpSystemType eOSType, QString strVersion );
     void RecorderStateReceived ( ERecorderState eRecorderState );
