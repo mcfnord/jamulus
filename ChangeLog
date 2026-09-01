@@ -1,7 +1,13 @@
-### 3.12.5-JAMFAN-00 ###
+### 3.12.5-JAMFAN-01 ###
 
-- Merged upstream release 3.12.5 into the jamfan fork. No jamfan behaviour change;
-  the version string moves from 3.12.4-JAMFAN-NN to 3.12.5-JAMFAN-NN.
+- Merged upstream release 3.12.5 into the jamfan fork. No jamfan behaviour change.
+
+- The jamfan revision count RESTARTS at 01 on each new upstream base, so this build
+  follows 3.12.4-JAMFAN-22. That is not a downgrade and nothing treats it as one:
+  `parse_jamfan_version()` yields ((3,12,5),1) vs ((3,12,4),22) and the comparison at
+  `dormant-monitor.py` `need_install = cur is None or cur < staged` orders the BASE
+  tuple first, so a woken dormant sees this as newer and installs it (verified
+  2026-09-01, before shipping).
 
 - The base version is now DERIVED from upstream's own VERSION line in Jamulus.pro
   rather than hand-typed, so a future upstream bump merges cleanly and the jamfan
