@@ -240,12 +240,24 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
                 // stored as loss: span counts the positions the sender numbered, recv counts the
                 // ones that arrived, so a late packet raises recv, leaves span alone, and stops
                 // counting as loss without any counter going down.
+                const int iSeqBit  = 1 << ( iSeqByte & 7 );
+                const int iSeqWord = ( iSeqByte >> 3 ) & 31;
+
                 if ( !bSeqTotValid )
                 {
                     bSeqTotValid = true;
                     iSeqTotCur   = 0;
                     iSeqTotMax   = 0;
+                    iSeqTotMin   = 0;
+
+                    for ( int i = 0; i < 32; i++ )
+                    {
+                        aSeqTotSeen[i] = 0;
+                    }
+
+                    aSeqTotSeen[iSeqWord] |= static_cast<uint8_t> ( iSeqBit );
                     iSeqTotSpan.fetch_add ( 1, std::memory_order_relaxed );
+                    iSeqTotRecv.fetch_add ( 1, std::memory_order_relaxed );
                 }
                 else
                 {
@@ -264,15 +276,83 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
 
                     if ( iSeqTotCur > iSeqTotMax )
                     {
-                        // the sender's numbering advanced: count every position it now covers,
-                        // arrived or not
-                        iSeqTotSpan.fetch_add ( static_cast<uint32_t> ( iSeqTotCur - iSeqTotMax ), std::memory_order_relaxed );
+                        // The sender's numbering advanced: count every position it now covers,
+                        // arrived or not, and mark those positions NOT yet delivered so a later
+                        // arrival at one of them counts once and a repeat of it counts as a
+                        // duplicate.
+                        const int64_t iAdv = iSeqTotCur - iSeqTotMax;
+
+                        if ( iAdv >= 256 )
+                        {
+                            // the whole window turned over; nothing in it can still be current
+                            for ( int i = 0; i < 32; i++ )
+                            {
+                                aSeqTotSeen[i] = 0;
+                            }
+                        }
+                        else
+                        {
+                            for ( int64_t k = 1; k <= iAdv; k++ )
+                            {
+                                const uint8_t iClr = static_cast<uint8_t> ( iSeqByte - ( iAdv - k ) );
+                                aSeqTotSeen[( iClr >> 3 ) & 31] &= static_cast<uint8_t> ( ~( 1 << ( iClr & 7 ) ) );
+                            }
+                        }
+
+                        iSeqTotSpan.fetch_add ( static_cast<uint32_t> ( iAdv ), std::memory_order_relaxed );
                         iSeqTotMax = iSeqTotCur;
+
+                        aSeqTotSeen[iSeqWord] |= static_cast<uint8_t> ( iSeqBit );
+                        iSeqTotRecv.fetch_add ( 1, std::memory_order_relaxed );
+                    }
+                    else if ( iSeqTotCur < iSeqTotMin )
+                    {
+                        // The numbering also extends BACKWARD: a packet older than the first
+                        // one this session ever saw. Those positions are just as real as the
+                        // ones ahead, and counting only forward from the opening packet made
+                        // recv exceed span by one on every heavily reordered stream -- measured
+                        // as wire loss -1/65916 on a `delay 20ms 3ms` arm with zero duplicates,
+                        // which is a DIFFERENT mechanism from the connect-time duplication and
+                        // needed its own branch.
+                        const int64_t iBack = iSeqTotMin - iSeqTotCur;
+
+                        if ( iBack >= 256 )
+                        {
+                            for ( int i = 0; i < 32; i++ )
+                            {
+                                aSeqTotSeen[i] = 0;
+                            }
+                        }
+                        else
+                        {
+                            for ( int64_t k = 1; k <= iBack; k++ )
+                            {
+                                const uint8_t iClr = static_cast<uint8_t> ( iSeqByte + ( iBack - k ) );
+                                aSeqTotSeen[( iClr >> 3 ) & 31] &= static_cast<uint8_t> ( ~( 1 << ( iClr & 7 ) ) );
+                            }
+                        }
+
+                        iSeqTotSpan.fetch_add ( static_cast<uint32_t> ( iBack ), std::memory_order_relaxed );
+                        iSeqTotMin = iSeqTotCur;
+
+                        aSeqTotSeen[iSeqWord] |= static_cast<uint8_t> ( iSeqBit );
+                        iSeqTotRecv.fetch_add ( 1, std::memory_order_relaxed );
+                    }
+                    else if ( aSeqTotSeen[iSeqWord] & iSeqBit )
+                    {
+                        // this position was already delivered -- a duplicate, NOT a delivery.
+                        // Counting it in recv is what drove derived loss negative before.
+                        iSeqTotDup.fetch_add ( 1, std::memory_order_relaxed );
+                    }
+                    else
+                    {
+                        // a late packet filling a gap the numbering had already opened
+                        aSeqTotSeen[iSeqWord] |= static_cast<uint8_t> ( iSeqBit );
+                        iSeqTotRecv.fetch_add ( 1, std::memory_order_relaxed );
                     }
                 }
 
                 iSeqTotPrev = iSeqByte;
-                iSeqTotRecv.fetch_add ( 1, std::memory_order_relaxed );
             }
 
             // calculate the sequence number difference and take care of wrap

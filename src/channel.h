@@ -195,6 +195,7 @@ public:
     // unlike seq= these need no per-window rollup here, which is exactly the point of them.
     uint32_t GetSeqTotRecv() const { return SockBuf.GetSeqTotRecv(); }
     uint32_t GetSeqTotSpan() const { return SockBuf.GetSeqTotSpan(); }
+    uint32_t GetSeqTotDup() const { return SockBuf.GetSeqTotDup(); }
 
     // Concealment cause (127k): the same concealment total as GetCumConcealFails(), split by
     // WHY the slot was empty. never+late+early == GetCumConcealFails() on every sample, which

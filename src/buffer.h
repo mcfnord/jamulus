@@ -305,13 +305,25 @@ public:
     //
     // Both are MONOTONIC and are never reset per window, so a consumer differences two samples:
     //   span   how far the sender's numbering has advanced
-    //   recv   how many of those positions actually arrived
+    //   recv   how many of those positions actually arrived, counted ONCE each
+    //   dup    arrivals at a position already delivered
     //   loss   span - recv, DERIVED, never stored
+    //
+    // recv counts DISTINCT POSITIONS, not arrivals, and that distinction is not
+    // theoretical: measured 2026-09-01 by tcpdump at a fleet server, a real client
+    // duplicates its opening audio blocks at connect -- the wire reads 1, 2, 1, 2, 3,
+    // 4, ... Counting arrivals made recv exceed span and drove derived loss NEGATIVE
+    // (-10 on an 11,878-block capture, exactly the 10 duplicates). The 256-bit window
+    // below is what makes the count exact: the sequence number is one byte and wraps
+    // at 256, while the jitter buffer holds at most 11 frames, so the window is far
+    // wider than any legitimate reorder distance. One bit test and one bit set per
+    // packet; the clear loop runs once per newly numbered position, i.e. once.
     // A late arrival corrects itself with no counter going down: it raises recv and leaves span
     // alone. Storing the loss instead is what forces a counter backwards, and a counter that
     // moves backwards is indistinguishable from a new session starting.
     uint32_t GetSeqTotRecv() const { return iSeqTotRecv.load ( std::memory_order_relaxed ); }
     uint32_t GetSeqTotSpan() const { return iSeqTotSpan.load ( std::memory_order_relaxed ); }
+    uint32_t GetSeqTotDup() const { return iSeqTotDup.load ( std::memory_order_relaxed ); }
     uint32_t GetSeqReorderCount() const { return iSeqReorder.load ( std::memory_order_relaxed ); }
 
     void ResetSeqStats()
@@ -398,6 +410,12 @@ public:
         bSeqTotValid = false;
         iSeqTotRecv.store ( 0, std::memory_order_relaxed );
         iSeqTotSpan.store ( 0, std::memory_order_relaxed );
+        iSeqTotDup.store ( 0, std::memory_order_relaxed );
+
+        for ( int i = 0; i < 32; i++ )
+        {
+            aSeqTotSeen[i] = 0;
+        }
     }
 
 protected:
@@ -451,9 +469,13 @@ protected:
     bool                  bSeqTotValid = false; // false until the first packet of the session
     uint8_t               iSeqTotPrev  = 0;     // last received sequence byte, for unwrapping
     int64_t               iSeqTotCur   = 0;     // unwrapped position of that last received packet
-    int64_t               iSeqTotMax   = 0;     // running maximum: what the span is measured to
+    int64_t               iSeqTotMax   = 0;     // running maximum of the numbering seen
+    int64_t               iSeqTotMin   = 0;     // running MINIMUM: the numbering also extends back
     std::atomic<uint32_t> iSeqTotRecv { 0 };
     std::atomic<uint32_t> iSeqTotSpan { 0 };
+    std::atomic<uint32_t> iSeqTotDup { 0 };
+    // one bit per sequence-number value: 1 = that position has already been delivered
+    uint8_t aSeqTotSeen[32] = {};
 
     // concealment cause; see the accessors above. Simulation buffers never touch these --
     // CNetBufWithStats runs ten of them per channel and their Get failures are hypothetical,
