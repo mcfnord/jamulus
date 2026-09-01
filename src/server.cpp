@@ -788,6 +788,12 @@ void CServer::OnTimerCapacityLog()
 
 void CServer::OnTimer()
 {
+    // R5/Phase 2: set in the tick block below when a real inter-tick gap was measured; read at the
+    // END of the client-work branch to stamp this tick's duration. Declared at function scope
+    // because those two sites are in different blocks. Guarding on it skips the first tick after
+    // Start(), which would otherwise be differenced against a stale iLastTickNs.
+    bool bTickStamped = false;
+
     // Telemetry v2 group D: the audio tick's own lateness. Without this, a server that is late
     // looks EXACTLY like every client degrading at once -- and that is also the evidence behind
     // any future "other players here are not affected" claim. §77p/q measured that the audio tick
@@ -816,6 +822,36 @@ void CServer::OnTimer()
             {
                 iTelemV2TickMaxLateUs = static_cast<qint64> ( dLateMs * 1000.0 );
             }
+            if ( dLateMs > iTelemV2TickWinMaxLateUs / 1000.0 )
+            {
+                iTelemV2TickWinMaxLateUs = static_cast<qint64> ( dLateMs * 1000.0 );
+            }
+
+            // Lateness bucketed in multiples of the expected tick period, so the shape means the
+            // same thing at either frame size. Plain ++, not fetch_add: this is the main thread
+            // only (the per-channel arrival histogram uses atomics because it runs on the socket
+            // thread -- do not copy the atomics along with the ladder's shape).
+            const double dLateRatio = ( dExpectedMs > 0.0 ) ? ( dLateMs / dExpectedMs ) : 0.0;
+            int          iLateBucket;
+            if ( dLateRatio < 0.25 )
+                iLateBucket = 0;
+            else if ( dLateRatio < 0.5 )
+                iLateBucket = 1;
+            else if ( dLateRatio < 1.0 )
+                iLateBucket = 2;
+            else if ( dLateRatio < 2.0 )
+                iLateBucket = 3;
+            else if ( dLateRatio < 4.0 )
+                iLateBucket = 4;
+            else if ( dLateRatio < 8.0 )
+                iLateBucket = 5;
+            else if ( dLateRatio < 32.0 )
+                iLateBucket = 6;
+            else
+                iLateBucket = 7; // long stall
+            aiTelemV2TickLateHist[iLateBucket]++;
+
+            bTickStamped = true;
         }
     }
 
@@ -988,6 +1024,14 @@ void CServer::OnTimer()
                     vecvecsData2[i][j] = vecvecsData[i][j];
                 }
             }
+        }
+        // R5/Phase 2: stamp the tick's own duration. Deliberately INSIDE the client-work branch
+        // -- after the else, TickTimer may just have been invalidated by Stop().
+        if ( bTickStamped )
+        {
+            const qint64 iDurUs = ( TickTimer.nsecsElapsed() - iLastTickNs ) / 1000;
+            iTelemV2TickDurSumUs += iDurUs;
+            iTelemV2TicksTimed++;
         }
     }
     else
@@ -1924,7 +1968,17 @@ void CServer::WriteTelemetryV2()
         QFile fLoad ( "/proc/loadavg" );
         if ( fLoad.open ( QIODevice::ReadOnly ) ) { double d = 0.0; QTextStream ( &fLoad ) >> d; iLoad100 = static_cast<int> ( d * 100.0 + 0.5 ); }
 
-        out << QString ( "s2 %1 srv=%2 nconn=%3 hw=%4 tick=%5/%6/%7 cfg=%8/%9/%10/%11 cpu=%12,%13 rss=%14 load=%15 skip=%16\n" )
+        QString strTHist;
+        for ( int i = 0; i < 8; i++ )
+        {
+            if ( i > 0 )
+            {
+                strTHist += ",";
+            }
+            strTHist += QString::number ( aiTelemV2TickLateHist[i] );
+        }
+
+        out << QString ( "s2 %1 srv=%2 nconn=%3 hw=%4 tick=%5/%6/%7 cfg=%8/%9/%10/%11 cpu=%12,%13 rss=%14 load=%15 skip=%16 thist=%17 tdur=%18/%19 wmax=%20\n" )
                    .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
                    .arg ( iTelemV2ServerId )
                    .arg ( GetNumberOfConnectedClients() )
@@ -1937,7 +1991,16 @@ void CServer::WriteTelemetryV2()
                    .arg ( iCpuTot ).arg ( iCpuSteal )
                    .arg ( iRssKb )
                    .arg ( iLoad100 )
-                   .arg ( iTelemV2SkippedPasses );
+                   .arg ( iTelemV2SkippedPasses )
+                   .arg ( strTHist )
+                   .arg ( iTelemV2TickDurSumUs )
+                   .arg ( iTelemV2TicksTimed )
+                   .arg ( iTelemV2TickWinMaxLateUs );
+
+        // Windowed max resets right after the write, so each pass reports THIS window's worst
+        // tick. The lifetime max stays in tick=%7; differencing a max is meaningless, which is
+        // why the windowed form exists at all.
+        iTelemV2TickWinMaxLateUs = 0;
     }
 
     for ( int iChanID = 0; iChanID < iMaxNumChannels; iChanID++ )

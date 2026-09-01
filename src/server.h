@@ -395,6 +395,12 @@ protected:
     quint64  iTelemV2Ticks       = 0;
     quint64  iTelemV2TicksLate1ms = 0;
     qint64   iTelemV2TickMaxLateUs = 0;
+    // R5/Phase 2. tdur separates "the server is slow" (dur grows) from "the server was preempted"
+    // (tick= late, dur flat) -- today tick= folds both into one number and they cannot be split.
+    quint64  iTelemV2TickDurSumUs     = 0;
+    quint64  iTelemV2TicksTimed       = 0;
+    qint64   iTelemV2TickWinMaxLateUs = 0; // windowed: reset after every s2 write
+    quint32  aiTelemV2TickLateHist[8] = {};
     QString  strTelemV2Path;
     QTimer              TimerCapacityLog;
 
