@@ -348,7 +348,8 @@ void CChannel::SetPan ( const int iChanID, const float fNewPan )
     // set value (make sure channel ID is in range)
     if ( ( iChanID >= 0 ) && ( iChanID < MAX_NUM_CHANNELS ) )
     {
-        vecfPannings[iChanID] = fNewPan;
+        // pan range is 0..1; guard to avoid wrong values from the network
+        vecfPannings[iChanID] = std::min ( 1.0f, std::max ( fNewPan, 0.0f ) );
     }
 }
 
@@ -367,15 +368,33 @@ float CChannel::GetPan ( const int iChanID )
     }
 }
 
+void CChannel::ResetInfo()
+{
+    QMutexLocker locker ( &Mutex );
+
+    bIsIdentified = false;
+    ChannelInfo   = CChannelCoreInfo();
+}
+
 void CChannel::SetChanInfo ( const CChannelCoreInfo& NChanInf )
 {
-    // apply value (if a new channel or different from previous one)
-    if ( !bIsIdentified || ChannelInfo != NChanInf )
+    bool bChanged = false;
+
     {
-        bIsIdentified = true; // Indicate we have received channel info
+        QMutexLocker locker ( &Mutex );
 
-        ChannelInfo = NChanInf;
+        // apply value (if a new channel or different from previous one)
+        if ( !bIsIdentified || ChannelInfo != NChanInf )
+        {
+            bIsIdentified = true; // Indicate we have received channel info
 
+            ChannelInfo = NChanInf;
+            bChanged    = true;
+        }
+    }
+
+    if ( bChanged )
+    {
         // fire message that the channel info has changed
         emit ChanInfoHasChanged();
     }
@@ -388,6 +407,15 @@ QString CChannel::GetName()
     QMutexLocker locker ( &Mutex );
 
     return ChannelInfo.strName;
+}
+
+CChannelCoreInfo CChannel::GetChanInfo()
+{
+    // make sure the struct is not written at the same time when it is
+    // read here -> use mutex to secure access
+    QMutexLocker locker ( &Mutex );
+
+    return ChannelInfo;
 }
 
 void CChannel::OnSendProtMessage ( CVector<uint8_t> vecMessage )

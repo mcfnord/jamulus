@@ -1,8 +1,19 @@
-# Keep this a literal assignment: .github/autobuild/get_build_vars.py reads VERSION
-# by regex out of this file and never runs qmake, so a $$-expansion here reaches CI
-# unexpanded and the ChangeLog lookup then finds no matching entry.
-VERSION = 3.12.4-JAMFAN-00
-!isEmpty(JAMFAN_REV): VERSION = 3.12.4-JAMFAN-$$JAMFAN_REV
+# DERIVED FROM UPSTREAM -- do not re-type the base version here (2026-09-01).
+#
+# The line below is byte-identical to upstream's own, so an upstream release bump merges
+# cleanly instead of conflicting every time, and the jamfan base can never silently drift
+# from the code it names. It stayed a hand-typed `3.12.4-JAMFAN-00` for the whole 3.12.4
+# cycle and did not move when upstream shipped 3.12.5.
+#
+# It MUST remain a literal: .github/autobuild/get_build_vars.py reads VERSION out of this
+# file by regex and never runs qmake, so a $$-expansion on THIS line would reach CI
+# unexpanded and the ChangeLog lookup would find no matching entry. That regex is
+# `re.search(r'^VERSION\s*=\s*(\S+)$', ..., re.MULTILINE)` -- FIRST match, anchored at line
+# start -- so it reads this line and cannot match the one after it, which begins with
+# `!isEmpty(`. Verified 2026-09-01: CI reads `3.12.5`, `qmake JAMFAN_REV=23` yields
+# `3.12.5-JAMFAN-23`, and a bare `qmake` yields `3.12.5`.
+VERSION = 3.12.5
+!isEmpty(JAMFAN_REV): VERSION = $${VERSION}-JAMFAN-$$JAMFAN_REV
 
 # Using lrelease and embed_translations only works for Qt 5.12 or later.
 # See https://github.com/jamulussoftware/jamulus/pull/3288 for these changes.

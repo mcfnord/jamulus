@@ -1,3 +1,26 @@
+### 3.12.5-JAMFAN-00 ###
+
+- Merged upstream release 3.12.5 into the jamfan fork. No jamfan behaviour change;
+  the version string moves from 3.12.4-JAMFAN-NN to 3.12.5-JAMFAN-NN.
+
+- The base version is now DERIVED from upstream's own VERSION line in Jamulus.pro
+  rather than hand-typed, so a future upstream bump merges cleanly and the jamfan
+  base cannot drift from the code it names.
+
+### 3.12.5 (2026-08-31) ###
+
+- Bugfix: Ensure correct bounds for panning (#3899).
+  (contributed by @ann0see)
+
+- Bugfix: Removed potential server crash when recording (#3909).
+  (contributed by @pljones)
+
+- Bugfix: Ensure ChannelInfo mutex taken (#3930).
+  (contributed by @pljones)
+
+- Bugfix: Client: Fixed a startup crash caused by an out-of-range custom directory index in the settings file (#3931).
+  (contributed by @mcfnord)
+
 ### 3.12.4-JAMFAN-00 ###
 
 - Rebased the jamfan fork onto upstream release 3.12.4. No jamfan behaviour change;
