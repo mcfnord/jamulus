@@ -2125,6 +2125,19 @@ void CServer::WriteTelemetryV2()
                    .arg ( vecChannels[iChanID].GetUploadRateKbps() )
                    .arg ( vecChannels[iChanID].GetBufAutoSetting() );
 
+        // wire= : what the WIRE delivered, as R received of the S positions the sender numbered.
+        // Loss is S-R, derived. This exists because seq= above reads HIGH under reordering: it
+        // books a gap as loss immediately and the give-back is clamped at zero, so a late packet
+        // arriving after the ~2 s window rolled cannot take its loss back. MEASURED 2026-09-01 on
+        // a netem `delay 20ms 3ms` arm where the kernel dropped ZERO packets: seq= reported 93
+        // lost of 65,443 (0.142%) against 34,195 reordered arrivals.
+        //
+        // seq= is deliberately left exactly as it was. Every existing consumer reads it, and
+        // TELEMETRY-PLAN.md section 4 is explicit that adding a field is safe and changing one is
+        // not. Both terms of wire= are monotonic, so a consumer differences two samples and a
+        // counter that moves backwards means a new session and nothing else.
+        out << QString ( " wire=%1/%2" ).arg ( vecChannels[iChanID].GetSeqTotRecv() ).arg ( vecChannels[iChanID].GetSeqTotSpan() );
+
         // CONCEALMENT CAUSE (OPEN-TEST-PLANS.md 127k). conceal= above says a block was missing;
         // this says why its slot was empty. Self-checking by construction:
         // never+late+early == conceal='s numerator, because the three cases partition every

@@ -233,6 +233,46 @@ bool CNetBuf::Put ( const CVector<uint8_t>& vecbyData, int iInSize )
 
                 iSeqStatPrev = iSeqByte;
                 iSeqRecv.fetch_add ( 1, std::memory_order_relaxed );
+
+                // SESSION-LONG pair for wire= (buffer.h, INVESTIGATIONS.md F1/F3). Same unwrap
+                // rule, separate state, and never reset by the ~2 s ResetSeqStats() above --
+                // which is precisely why it does not inherit that reset's bias. Nothing is
+                // stored as loss: span counts the positions the sender numbered, recv counts the
+                // ones that arrived, so a late packet raises recv, leaves span alone, and stops
+                // counting as loss without any counter going down.
+                if ( !bSeqTotValid )
+                {
+                    bSeqTotValid = true;
+                    iSeqTotCur   = 0;
+                    iSeqTotMax   = 0;
+                    iSeqTotSpan.fetch_add ( 1, std::memory_order_relaxed );
+                }
+                else
+                {
+                    int iTotStep = static_cast<int> ( iSeqByte ) - static_cast<int> ( iSeqTotPrev );
+
+                    if ( iTotStep < -128 )
+                    {
+                        iTotStep += 256;
+                    }
+                    else if ( iTotStep >= 128 )
+                    {
+                        iTotStep -= 256;
+                    }
+
+                    iSeqTotCur += iTotStep;
+
+                    if ( iSeqTotCur > iSeqTotMax )
+                    {
+                        // the sender's numbering advanced: count every position it now covers,
+                        // arrived or not
+                        iSeqTotSpan.fetch_add ( static_cast<uint32_t> ( iSeqTotCur - iSeqTotMax ), std::memory_order_relaxed );
+                        iSeqTotMax = iSeqTotCur;
+                    }
+                }
+
+                iSeqTotPrev = iSeqByte;
+                iSeqTotRecv.fetch_add ( 1, std::memory_order_relaxed );
             }
 
             // calculate the sequence number difference and take care of wrap

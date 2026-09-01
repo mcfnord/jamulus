@@ -191,6 +191,11 @@ public:
     uint32_t GetCumSeqSpan() const { return iCumSeqSpan.load ( std::memory_order_relaxed ); }
     uint32_t GetCumSeqReorder() const { return iCumSeqReorder.load ( std::memory_order_relaxed ); }
 
+    // wire= : the session-long, unbiased pair (buffer.h). Read straight from the socket buffer --
+    // unlike seq= these need no per-window rollup here, which is exactly the point of them.
+    uint32_t GetSeqTotRecv() const { return SockBuf.GetSeqTotRecv(); }
+    uint32_t GetSeqTotSpan() const { return SockBuf.GetSeqTotSpan(); }
+
     // Concealment cause (127k): the same concealment total as GetCumConcealFails(), split by
     // WHY the slot was empty. never+late+early == GetCumConcealFails() on every sample, which
     // is what makes the emitted field self-checking rather than merely plausible.

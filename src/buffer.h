@@ -288,6 +288,30 @@ public:
     // own drop counter on the wire: 4.93% vs 4.97% offered (runs/SEQ-up5).
     uint32_t GetSeqRecvCount() const { return iSeqRecv.load ( std::memory_order_relaxed ); }
     uint32_t GetSeqLossCount() const { return iSeqLoss.load ( std::memory_order_relaxed ); }
+
+    // SESSION-LONG, UNBIASED wire accounting -- the wire= field (INVESTIGATIONS.md F1/F3).
+    //
+    // The three counters above are per-WINDOW: CChannel::GetData folds them into its cumulative
+    // totals every ~2 s and calls ResetSeqStats(). That reset is what biases seq=. A gap is
+    // booked as loss the moment the sender's numbering steps over it; the late packet gives it
+    // back -- but only if it arrives inside the same window, because the give-back is clamped at
+    // zero (the while ( iPrevLoss > 0 ... ) loop below) and the inflated count has already been
+    // folded in. MEASURED 2026-09-01: on a netem `delay 20ms 3ms` arm where the kernel dropped
+    // ZERO packets, seq= reported 93 lost of 65,443 (0.142%), against 34,195 reordered arrivals.
+    //
+    // These two run BESIDE the old counters rather than replacing them: seq= keeps its exact
+    // current meaning for every existing consumer (TELEMETRY-PLAN.md section 4 -- adding a field
+    // is safe, changing one is not).
+    //
+    // Both are MONOTONIC and are never reset per window, so a consumer differences two samples:
+    //   span   how far the sender's numbering has advanced
+    //   recv   how many of those positions actually arrived
+    //   loss   span - recv, DERIVED, never stored
+    // A late arrival corrects itself with no counter going down: it raises recv and leaves span
+    // alone. Storing the loss instead is what forces a counter backwards, and a counter that
+    // moves backwards is indistinguishable from a new session starting.
+    uint32_t GetSeqTotRecv() const { return iSeqTotRecv.load ( std::memory_order_relaxed ); }
+    uint32_t GetSeqTotSpan() const { return iSeqTotSpan.load ( std::memory_order_relaxed ); }
     uint32_t GetSeqReorderCount() const { return iSeqReorder.load ( std::memory_order_relaxed ); }
 
     void ResetSeqStats()
@@ -368,6 +392,12 @@ public:
         iRunCur = 0;
         ResetRunStats();
         ResetSeqStats();
+
+        // the session-long pair resets HERE and only here -- that is the whole difference
+        // between it and the per-window counters ResetSeqStats() clears every ~2 s
+        bSeqTotValid = false;
+        iSeqTotRecv.store ( 0, std::memory_order_relaxed );
+        iSeqTotSpan.store ( 0, std::memory_order_relaxed );
     }
 
 protected:
@@ -413,6 +443,17 @@ protected:
     std::atomic<uint32_t> iSeqRecv { 0 };
     std::atomic<uint32_t> iSeqLoss { 0 };
     std::atomic<uint32_t> iSeqReorder { 0 };
+
+    // session-long unwrap state for the wire= pair; deliberately SEPARATE from the per-window
+    // state above, because that state restarts every time ResetSeqStats() runs. The positions
+    // are 64-bit because they only count up, one step per audio block: at the 1.33 ms block size
+    // a 32-bit position overflows after about a month of one continuous connection.
+    bool                  bSeqTotValid = false; // false until the first packet of the session
+    uint8_t               iSeqTotPrev  = 0;     // last received sequence byte, for unwrapping
+    int64_t               iSeqTotCur   = 0;     // unwrapped position of that last received packet
+    int64_t               iSeqTotMax   = 0;     // running maximum: what the span is measured to
+    std::atomic<uint32_t> iSeqTotRecv { 0 };
+    std::atomic<uint32_t> iSeqTotSpan { 0 };
 
     // concealment cause; see the accessors above. Simulation buffers never touch these --
     // CNetBufWithStats runs ten of them per channel and their Get failures are hypothetical,
