@@ -1,3 +1,34 @@
+### 3.12.5-JAMFAN-02 ###
+
+- telemetry v2: new `wire=R/S` field on every t2 record. R packets received of the
+  S positions the sender numbered; wire loss is S-R, derived, never stored.
+
+- WHY: `seq=L/S` reads HIGH under reordering and always has. It books a gap as loss
+  the moment the sender's numbering steps over it and gives the loss back when the
+  late packet arrives -- but the give-back is clamped at zero and GetData resets the
+  per-window sequence stats every ~2 s, so a packet arriving after its window rolled
+  cannot take its loss back. Measured 2026-09-01 on a netem `delay 20ms 3ms` arm
+  where the kernel dropped ZERO packets and 34,632 arrivals were reordered:
+
+      seq=    89 lost of 66,117  =  0.135%
+      wire=    0 lost of 66,004  =  0.000%   (span == recv exactly)
+
+- `seq=` is UNCHANGED and stays in the record. Every existing consumer reads it, and
+  TELEMETRY-PLAN.md section 4 is explicit that adding a t2 field is safe while
+  changing one is not. Verified against a record from the shipped build: one key
+  added, none removed, no field shape changed.
+
+- Both terms of `wire=` are monotonic and neither is reset per window, so a consumer
+  differences two samples and a counter that moves backwards means a new session and
+  nothing else. That property is why the loss is derived rather than stored.
+
+- Held corpus data keeps `seq=`'s bias; it cannot be retro-fitted. Any re-derivation
+  of the fleet's concealment-vs-loss split runs on post-deploy data only.
+
+- `telem-regression.py`'s era marker moved `cwin=` -> `wire=` in the same change:
+  `cwin=` had reached every fleet record, so every record read "post" and the guard
+  compared nothing. A marker only discriminates until it is fleet-wide.
+
 ### 3.12.5-JAMFAN-01 ###
 
 - Merged upstream release 3.12.5 into the jamfan fork. No jamfan behaviour change.
