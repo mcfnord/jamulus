@@ -1,3 +1,38 @@
+### 3.12.5-JAMFAN-24 ###
+
+- telemetry v2: `wire=` is now `R/S/D` -- R positions received of the S the sender
+  numbered, plus D duplicate arrivals. Loss is S-R, derived. This CORRECTS the field
+  introduced in JAMFAN-23, which could report NEGATIVE loss.
+
+- Two independent defects, each found by measurement, each needing its own fix:
+
+  1. DUPLICATES. tcpdump at a fleet server showed a real client repeats its opening
+     audio blocks at connect -- the wire reads 1, 2, 1, 2, 3, 4, ... R counted
+     arrivals, so it exceeded S by exactly the duplicate count (-10 loss on an
+     11,878-block capture). R now counts each position ONCE, via a 256-bit window
+     indexed by the raw sequence byte; the sequence space wraps at 256 while the
+     jitter buffer holds at most 11 frames, so the window is far wider than any
+     legitimate reorder distance. Duplicates are reported as D rather than absorbed.
+
+  2. BACKWARD EXTENSION. On a heavily reordered stream a packet arrives OLDER than
+     the first the session saw. Those positions are real, but S only grew forward,
+     so R exceeded S by one -- measured as -1/65916 on a jitter arm with ZERO
+     duplicates, a different mechanism from (1).
+
+- Verified on four rig arms; the fourth is new and exists because of this bug:
+
+      clean         loss 0/65665       dup 0
+      loss 5%       loss 4.992%        dup 0      netem 4.952%
+      delay 20/3ms  loss 0.002% (+1)   dup 0      netem 0.000%
+      duplicate 2%  loss 0/66879       dup 1345   netem 0.000%
+
+  The jitter arm's +1 is a packet in flight at the sample instant; it read -1 before.
+  netem's loss and reorder models never repeat a packet, which is why the first three
+  arms passed a broken field -- `duplicate 2%` is now permanent in run-f3-arms.sh.
+
+- `seq=` remains untouched, and no consumer reads `wire=` yet, so no published number
+  was ever computed from the broken values.
+
 ### 3.12.5-JAMFAN-23 ###
 
 - NOTE ON THE NUMBER, because it contradicts the entry below. deploy.sh derives the
