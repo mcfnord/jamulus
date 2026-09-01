@@ -1,4 +1,14 @@
-### 3.12.5-JAMFAN-02 ###
+### 3.12.5-JAMFAN-23 ###
+
+- NOTE ON THE NUMBER, because it contradicts the entry below. deploy.sh derives the
+  revision from its own monotonic counter (`.jamfan-rev`), which carried straight on
+  from the 3.12.4 era and produced 23. The entry below announces a restart at 01 on
+  the 3.12.5 base, but nothing implements that restart -- the previous build shipped
+  as 3.12.5-JAMFAN-23 under a ChangeLog entry headed 01, and this one did the same.
+  This header records WHAT SHIPPED, which is what `--version` reports to players and
+  what get_build_vars.py looks up. The convention and the counter need reconciling;
+  that is an operator decision, not something to paper over here.
+
 
 - telemetry v2: new `wire=R/S` field on every t2 record. R packets received of the
   S positions the sender numbered; wire loss is S-R, derived, never stored.
