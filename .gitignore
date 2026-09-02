@@ -69,6 +69,8 @@ jamulus_plugin_import.cpp
 /dormant-monitor.py
 /fleet-stress.sh
 /fleet.json
+/dormant-instances.json
+*.bak-*
 /investigate_guid_ip.py
 /jamfan-rev
 /monitor-blind-window.py
