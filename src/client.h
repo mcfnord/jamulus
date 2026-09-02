@@ -493,16 +493,26 @@ protected:
     void OnTimerPlcAb();
     void OnTimerPlcAbTelemetry();
 
-    // TEST-ONLY (client-telemetry, Step 1, PLAN-CLIENT-TELEMETRY.md): downlink mirror of the
-    // server's t2 counters, sent over the same ACKed-FIFO mechanism as TimerPlcAbTelemetry
-    // (R-T1 validated that path -- see the plan doc, section 3). Off by default, unlike
-    // plc-ab: this rides a message ID (39) most fleet peers have never seen, so it stays
-    // opt-in until Step 1's symmetry runs are done. Env knobs: JAMULUS_CLIENT_TELEMETRY=1
-    // enables, JAM_CLIENT_TLM_SECS overrides the period (default 10).
+    // Client-telemetry (Step 1, PLAN-CLIENT-TELEMETRY.md): downlink mirror of the server's t2
+    // counters, sent over the same ACKed-FIFO mechanism as TimerPlcAbTelemetry (R-T1 validated
+    // that path -- see the plan doc, section 3).
+    //
+    // ON BY DEFAULT since 2026-09-02 (operator). It was opt-in while the concern was that
+    // message ID 39 is unknown to most peers; that concern is answered by the protocol itself:
+    // ParseMessageBody sets bEvaluateMessage for any non-split message, its switch has NO
+    // default branch, and CreateAndImmSendAcknMess fires AFTER the switch (protocol.cpp:770-870)
+    // -- so a server that does not know 39 drops it and still acknowledges it, and the sender
+    // never enters a resend loop. NOTE that is a SOURCE READ, not a measurement: the falsifying
+    // test is this client pointed at a server built before the ID existed, with no protocol
+    // stall and no resend storm observed.
+    //
+    // Cost is one 53-byte message per iClientTelemetrySecs -- ~5 B/s against ~48 kB/s of audio.
+    // Env knobs: JAMULUS_CLIENT_TELEMETRY=0 disables, =1 forces on; JAM_CLIENT_TLM_SECS
+    // overrides the period (default 10).
     QTimer                TimerClientTelemetry;
     QElapsedTimer         ClientTelemetryUptime;
     int                   iClientTelemetrySecs    = 10;
-    bool                  bClientTelemetryEnabled = false;
+    bool                  bClientTelemetryEnabled = true;
     uint32_t              iClientTelemetrySeq     = 0;
 
     void OnTimerClientTelemetry();

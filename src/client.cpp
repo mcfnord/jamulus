@@ -279,12 +279,13 @@ CClient::CClient ( const quint16  iPortNumber,
                                          .arg ( iPlcAbTlmSecs ) );
     }
 
-    // TEST-ONLY (client-telemetry, Step 1): opt-in, off unless JAMULUS_CLIENT_TELEMETRY=1
+    // Client-telemetry (Step 1): ON BY DEFAULT; JAMULUS_CLIENT_TELEMETRY=0 opts out, =1 forces
+    // on. Rationale and the outstanding falsification test are in client.h beside the member.
     {
         const char* pEnv;
-        if ( ( pEnv = getenv ( "JAMULUS_CLIENT_TELEMETRY" ) ) && ( atoi ( pEnv ) == 1 ) )
+        if ( ( pEnv = getenv ( "JAMULUS_CLIENT_TELEMETRY" ) ) )
         {
-            bClientTelemetryEnabled = true;
+            bClientTelemetryEnabled = ( atoi ( pEnv ) != 0 );
         }
         if ( ( pEnv = getenv ( "JAM_CLIENT_TLM_SECS" ) ) && ( atoi ( pEnv ) > 0 ) )
         {
