@@ -721,10 +721,37 @@ void CClient::OnTimerClientTelemetry()
     Tlm.iDragBackCum       = Channel.GetCumDragBack();
     Tlm.iDragFwdCum        = Channel.GetCumDragFwd();
 
+    // --- wire format 2 (Tier A'/B) ---------------------------------------------------
+    // All of it is already held by CClient or CChannel and read off the main thread; the
+    // only new measurement in v2 is the arrival histogram, which the client accumulates
+    // now that the gate in CChannel::PutAudioData is no longer server-only.
+    for ( int i = 0; i < 8; i++ )
+    {
+        Tlm.iGapHist[i] = Channel.GetArrivalBucket ( i );
+    }
+
+    Tlm.iJitBufBlocks      = static_cast<uint16_t> ( Channel.GetSockBufNumFrames() );
+    Tlm.bAutoJitBuf        = Channel.GetDoAutoSockBufSize() ? 1 : 0;
+    Tlm.iCodecType         = static_cast<uint8_t> ( Channel.GetAudioCompressionType() );
+    Tlm.iNumAudioChans     = static_cast<uint8_t> ( Channel.GetNumAudioChannels() );
+    Tlm.iNetwFrameSizeFact = static_cast<uint8_t> ( Channel.GetNetwFrameSizeFact() );
+    Tlm.iClipCum           = iPlcAbClipCum.load ( std::memory_order_relaxed );
+    Tlm.iKbps              = static_cast<uint16_t> ( qBound ( 0, Channel.GetUploadRateKbps(), 65535 ) );
+
+    // ping= and delay= are ZERO on a headless client and that is not a bug in this record:
+    // iCurPingTime is only ever written when a CLM ping REPLY arrives (client.cpp
+    // OnCLPingReceived), and the only code that sends those pings on a connected session is
+    // the GUI's own timer in CClientDlg. A `-n` client therefore never measures its ping, so
+    // the field reports what the client actually knows rather than inventing a number here.
+    Tlm.iPingMs  = static_cast<uint16_t> ( qBound ( 0, iCurPingTime, 65535 ) );
+    Tlm.iDelayMs = static_cast<uint16_t> ( qBound ( 0, EstimatedOverallDelay ( iCurPingTime ), 65535 ) );
+
     Channel.CreateClientTelemetryMes ( Tlm );
 
     // local copy of the same record, so a headless run needs no server access
-    qDebug() << qUtf8Printable ( QString ( "[CLIENTTLM] tlm seq=%1 up=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runmax=%8 drag=%9/%10" )
+    qDebug() << qUtf8Printable ( QString ( "[CLIENTTLM] tlm rep=%1 up=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runmax=%8 drag=%9/%10 "
+                                          "gap=%11,%12,%13,%14,%15,%16,%17,%18 jbuf=%19 auto=%20 codec=%21 chans=%22 fsz=%23 "
+                                          "ping=%24 delay=%25 clip=%26 kbps=%27" )
                                      .arg ( Tlm.iSeq )
                                      .arg ( Tlm.iUptimeSecs )
                                      .arg ( Tlm.iConcealFailsCum )
@@ -734,7 +761,24 @@ void CClient::OnTimerClientTelemetry()
                                      .arg ( Tlm.iSeqReorderCum )
                                      .arg ( Tlm.iRunMaxCum )
                                      .arg ( Tlm.iDragBackCum )
-                                     .arg ( Tlm.iDragFwdCum ) );
+                                     .arg ( Tlm.iDragFwdCum )
+                                     .arg ( Tlm.iGapHist[0] )
+                                     .arg ( Tlm.iGapHist[1] )
+                                     .arg ( Tlm.iGapHist[2] )
+                                     .arg ( Tlm.iGapHist[3] )
+                                     .arg ( Tlm.iGapHist[4] )
+                                     .arg ( Tlm.iGapHist[5] )
+                                     .arg ( Tlm.iGapHist[6] )
+                                     .arg ( Tlm.iGapHist[7] )
+                                     .arg ( Tlm.iJitBufBlocks )
+                                     .arg ( Tlm.bAutoJitBuf )
+                                     .arg ( Tlm.iCodecType )
+                                     .arg ( Tlm.iNumAudioChans )
+                                     .arg ( Tlm.iNetwFrameSizeFact )
+                                     .arg ( Tlm.iPingMs )
+                                     .arg ( Tlm.iDelayMs )
+                                     .arg ( Tlm.iClipCum )
+                                     .arg ( Tlm.iKbps ) );
 }
 
 void CClient::OnTimerRemoteChanGainOrPan()

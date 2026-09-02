@@ -1646,15 +1646,21 @@ bool CProtocol::EvaluatePlcAbTelemetryMes ( const CVector<uint8_t>& vecData )
 }
 
 // TEST-ONLY (client-telemetry, Step 1, PLAN-CLIENT-TELEMETRY.md): downlink mirror of the
-// server's t2 counters. 53 bytes fixed: ver(1) seq(4) uptime(4) then 11 cumulative u32
-// counters (44). Receiver only on the fleet build; sender is env-gated
-// (JAMULUS_CLIENT_TELEMETRY=1) on the client so one binary serves both roles.
+// server's t2 counters. Sender is on by default; JAMULUS_CLIENT_TELEMETRY=0 opts out
+// (client.cpp:282) -- one binary serves both roles.
+//
+// TWO WIRE FORMATS, both accepted by the receiver forever:
+//   v1  53 bytes: ver(1) seq(4) uptime(4) + 11 cumulative u32 counters (44)
+//   v2 101 bytes: v1 + gap[8] u32 (32) + jbuf u16, auto/codec/chans/fsz u8 (6)
+//                    + ping u16, delay u16 (4) + clip u32 (4) + kbps u16 (2)
+// A field is never removed or renumbered; the version tag is first and additions go on the
+// end, which is the same contract the t2 record keeps with its parsers.
 void CProtocol::CreateClientTelemetryMes ( const CClientTelemetry& Tlm )
 {
-    CVector<uint8_t> vecData ( 53 );
+    CVector<uint8_t> vecData ( CLIENT_TELEMETRY_V2_BYTES );
     int              iPos = 0; // init position pointer
 
-    PutValOnStream ( vecData, iPos, 1, 1 ); // wire format version
+    PutValOnStream ( vecData, iPos, 2, 1 ); // wire format version
     PutValOnStream ( vecData, iPos, Tlm.iSeq, 4 );
     PutValOnStream ( vecData, iPos, Tlm.iUptimeSecs, 4 );
     PutValOnStream ( vecData, iPos, Tlm.iConcealFailsCum, 4 );
@@ -1669,6 +1675,21 @@ void CProtocol::CreateClientTelemetryMes ( const CClientTelemetry& Tlm )
     PutValOnStream ( vecData, iPos, Tlm.iDragBackCum, 4 );
     PutValOnStream ( vecData, iPos, Tlm.iDragFwdCum, 4 );
 
+    // --- wire format 2 ---
+    for ( int i = 0; i < 8; i++ )
+    {
+        PutValOnStream ( vecData, iPos, Tlm.iGapHist[i], 4 );
+    }
+    PutValOnStream ( vecData, iPos, Tlm.iJitBufBlocks, 2 );
+    PutValOnStream ( vecData, iPos, Tlm.bAutoJitBuf, 1 );
+    PutValOnStream ( vecData, iPos, Tlm.iCodecType, 1 );
+    PutValOnStream ( vecData, iPos, Tlm.iNumAudioChans, 1 );
+    PutValOnStream ( vecData, iPos, Tlm.iNetwFrameSizeFact, 1 );
+    PutValOnStream ( vecData, iPos, Tlm.iPingMs, 2 );
+    PutValOnStream ( vecData, iPos, Tlm.iDelayMs, 2 );
+    PutValOnStream ( vecData, iPos, Tlm.iClipCum, 4 );
+    PutValOnStream ( vecData, iPos, Tlm.iKbps, 2 );
+
     CreateAndSendMessage ( PROTMESSID_CLIENT_TELEMETRY, vecData );
 }
 
@@ -1676,14 +1697,22 @@ bool CProtocol::EvaluateClientTelemetryMes ( const CVector<uint8_t>& vecData )
 {
     int iPos = 0; // init position pointer
 
-    if ( vecData.Size() != 53 )
+    // Size and version must agree. Checking both is what makes a future v3 safe to add: a
+    // v3 sender reaching a v2 server is rejected here rather than silently mis-parsed off
+    // the end of a shorter buffer.
+    const int iSize = vecData.Size();
+
+    if ( ( iSize != CLIENT_TELEMETRY_V1_BYTES ) && ( iSize != CLIENT_TELEMETRY_V2_BYTES ) )
     {
         return true; // return error code
     }
 
-    if ( GetValFromStream ( vecData, iPos, 1 ) != 1 )
+    const int iVer = GetValFromStream ( vecData, iPos, 1 );
+
+    if ( ( ( iVer == 1 ) && ( iSize != CLIENT_TELEMETRY_V1_BYTES ) ) || ( ( iVer == 2 ) && ( iSize != CLIENT_TELEMETRY_V2_BYTES ) ) ||
+         ( iVer < 1 ) || ( iVer > 2 ) )
     {
-        return true; // unknown wire format version
+        return true; // unknown wire format version, or a size that contradicts it
     }
 
     const uint32_t iSeq        = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
@@ -1700,7 +1729,12 @@ bool CProtocol::EvaluateClientTelemetryMes ( const CVector<uint8_t>& vecData )
     const uint32_t iDragBack   = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
     const uint32_t iDragFwd    = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
 
-    emit ClientTelemetryReceived ( QString ( "seq=%1 up=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runs=%8 runsum=%9 runge32=%10 runmax=%11 drag=%12/%13" )
+    // `rep=`, NOT `seq=`. Wire v1 named the report counter `seq=` and then emitted a second
+    // `seq=` for the downlink lost/span pair on the same line, so any parser building a dict
+    // kept only the second and read every session as a single report. Found 2026-09-02 by the
+    // first `c2` parser ever written (telem-c2pair.py). The old name is not preserved because
+    // nothing consumed it: this record had no parser at all until that script.
+    QString strFields = QString ( "rep=%1 up=%2 conceal=%3/%4 seq=%5/%6 reord=%7 runs=%8 runsum=%9 runge32=%10 runmax=%11 drag=%12/%13" )
                                         .arg ( iSeq )
                                         .arg ( iUptimeSecs )
                                         .arg ( iConcFails )
@@ -1713,7 +1747,43 @@ bool CProtocol::EvaluateClientTelemetryMes ( const CVector<uint8_t>& vecData )
                                         .arg ( iRunsGE32 )
                                         .arg ( iRunMax )
                                         .arg ( iDragBack )
-                                        .arg ( iDragFwd ) );
+                                        .arg ( iDragFwd );
+
+    if ( iVer >= 2 )
+    {
+        QString strGap;
+
+        for ( int i = 0; i < 8; i++ )
+        {
+            strGap += ( i ? "," : "" ) + QString::number ( static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) ) );
+        }
+
+        const int iJitBuf = GetValFromStream ( vecData, iPos, 2 );
+        const int iAuto   = GetValFromStream ( vecData, iPos, 1 );
+        const int iCodec  = GetValFromStream ( vecData, iPos, 1 );
+        const int iChans  = GetValFromStream ( vecData, iPos, 1 );
+        const int iFsz    = GetValFromStream ( vecData, iPos, 1 );
+        const int iPing   = GetValFromStream ( vecData, iPos, 2 );
+        const int iDelay  = GetValFromStream ( vecData, iPos, 2 );
+        const uint32_t iClip = static_cast<uint32_t> ( GetValFromStream ( vecData, iPos, 4 ) );
+        const int iKbps   = GetValFromStream ( vecData, iPos, 2 );
+
+        // Same field names as the t2 record wherever the quantity is the same, so the two
+        // halves of one session read as one table (telem-c2pair.py pairs them by name).
+        strFields += QString ( " gap=%1 jbuf=%2 auto=%3 codec=%4 chans=%5 fsz=%6 ping=%7 delay=%8 clip=%9 kbps=%10" )
+                         .arg ( strGap )
+                         .arg ( iJitBuf )
+                         .arg ( iAuto )
+                         .arg ( iCodec )
+                         .arg ( iChans )
+                         .arg ( iFsz )
+                         .arg ( iPing )
+                         .arg ( iDelay )
+                         .arg ( iClip )
+                         .arg ( iKbps );
+    }
+
+    emit ClientTelemetryReceived ( strFields );
 
     return false; // no error
 }

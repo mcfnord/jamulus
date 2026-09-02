@@ -618,7 +618,14 @@ EPutDataStat CChannel::PutAudioData ( const CVector<uint8_t>& vecbyData, const i
         // period. One clock read per packet on the socket thread -- measured 64.07 ns for the
         // QElapsedTimer read, 68.6 ns for the whole block (median of 9 interleaved reps,
         // TELEMETRY.md) -- and it does not block (convention 8 is about blocking, and this cannot).
-        if ( bIsServer && ( iAudioFrameSizeSamples > 0 ) )
+        // NOT gated on bIsServer since 2026-09-02: the client accumulates the same histogram
+        // for the DOWNLINK, which is what ships in the c2 record's gap= (wire v2). The
+        // denominator below is the packet period built from iAudioFrameSizeSamples and
+        // iNetwFrameSizeFact, and on the client those two are the values the received-packet
+        // size check a few lines down already validates against every arriving packet
+        // (iNumBytes == iNetwFrameSize * iNetwFrameSizeFact) -- so if they did not describe
+        // the server->client stream, no audio would flow at all.
+        if ( iAudioFrameSizeSamples > 0 )
         {
             if ( !ArrivalTimer.isValid() )
             {

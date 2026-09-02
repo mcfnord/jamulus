@@ -119,6 +119,12 @@ struct CPlcAbTelemetry
 // only serializes them. Cumulative since connect, same contract as CPlcAbTelemetry:
 // a lost report costs nothing, the next one carries the totals. Wire format fixed
 // at 53 bytes, version tag first (1 + 13*4).
+// Wire sizes for PROTMESSID_CLIENT_TELEMETRY. Named because three places must agree -- the
+// serializer's buffer, the receiver's size guard, and the version/size cross-check -- and a
+// bare 53 in two of them is exactly how a format grows a silent off-by-one.
+#define CLIENT_TELEMETRY_V1_BYTES 53
+#define CLIENT_TELEMETRY_V2_BYTES 101
+
 struct CClientTelemetry
 {
     uint32_t iSeq;              // telemetry message counter
@@ -134,6 +140,19 @@ struct CClientTelemetry
     uint32_t iRunMaxCum;        // t2 runmax= (downlink) -- a MAX, not a sum; server must max-merge
     uint32_t iDragBackCum;      // t2 drag= back half (downlink)
     uint32_t iDragFwdCum;       // t2 drag= fwd half (downlink)
+
+    // wire format 2 additions (PLAN-CLIENT-TELEMETRY.md Tier A'/B). Defaulted, so a v1
+    // sender that never touches them still serializes a well-formed record.
+    uint32_t iGapHist[8] = { 0, 0, 0, 0, 0, 0, 0, 0 }; // t2 gap= arrival histogram (downlink)
+    uint16_t iJitBufBlocks     = 0;                    // t2 jbuf=
+    uint8_t  bAutoJitBuf       = 0;                    // t2 auto=
+    uint8_t  iCodecType        = 0;                    // t2 codec=
+    uint8_t  iNumAudioChans    = 0;                    // t2 chans=
+    uint8_t  iNetwFrameSizeFact = 0;                   // t2 fsz=
+    uint16_t iPingMs           = 0;                    // client's own iCurPingTime
+    uint16_t iDelayMs          = 0;                    // EstimatedOverallDelay()
+    uint32_t iClipCum          = 0;                    // full-scale samples in decoded output
+    uint16_t iKbps             = 0;                    // client's own upload rate estimate
 };
 
 // message IDs of connection less messages (CLM)
