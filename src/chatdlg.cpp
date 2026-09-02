@@ -148,18 +148,24 @@ void CChatDlg::AddChatText ( QString strChatText )
     // coding hisself and we should not mess with that)
     if ( !strChatText.contains ( QRegularExpression ( "href\\s*=|src\\s*=" ) ) )
     {
-        // searches for all occurrences of http(s) and cuts until a space (\S matches any non-white-space
-        // character and the + means that matches the previous element one or more times.)
-        // This regex now contains three parts:
-        // - https?://\\S+ matches as much non-whitespace as possible after the http:// or https://,
-        //   subject to the next two parts, which exclude terminating punctuation
+        // searches for all occurrences of http(s) and cuts at the first character that cannot be
+        // part of a URL. This regex now contains three parts:
+        // - https?://[^\\s<>\"]+ matches as much as possible after the http:// or https://, stopping at
+        //   whitespace or at < > \" -- which cannot appear in a URL and DO appear in the surrounding
+        //   markup, since the chat text is HTML. A plain \\S+ here swallowed the closing tag: the welcome
+        //   "... at https://ear.jamulus.live!</p>" linkified to href="https://ear.jamulus.live!</p",
+        //   which QUrl rejects as invalid, so the anchor silently did nothing, the open-link prompt
+        //   showed an empty '' where the URL should be, and the leftover ">" rendered as its own line.
+        //   The two look-behinds below only trim TRAILING punctuation, so they cannot fix this on their
+        //   own -- "!</p" ends in "p"
+        // - the next two parts exclude terminating punctuation
         // - (?<![!\"'()+,.:;<=>?\\[\\]{}]) is a negative look-behind assertion that disallows the match
         //   from ending with one of the characters !"'()+,.:;<=>?[]{}
         // - (?<!\\?[!\"'()+,.:;<=>?\\[\\]{}]) is a negative look-behind assertion that disallows the match
         //   from ending with a ? followed by one of the characters !"'()+,.:;<=>?[]{}
         // These last two parts must be separate, as a look-behind assertion must be fixed length.
 #define PUNCT_NOEND_URL "[!\"'()+,.:;<=>?\\[\\]{}]"
-        strChatText.replace ( QRegularExpression ( "(https?://\\S+(?<!" PUNCT_NOEND_URL ")(?<!\\?" PUNCT_NOEND_URL "))" ),
+        strChatText.replace ( QRegularExpression ( "(https?://[^\\s<>\"]+(?<!" PUNCT_NOEND_URL ")(?<!\\?" PUNCT_NOEND_URL "))" ),
                               "<a href=\"\\1\">\\1</a>" );
     }
 
