@@ -121,6 +121,9 @@ void ChatReporter::onPatternsFetched()
 
 void ChatReporter::reportIfMatch(const QString& text)
 {
+    if (!m_enabled)
+        return;
+
     static const QRegularExpression urlRe(QStringLiteral(R"(https?://[^\s<>"']+)"),
                                           QRegularExpression::CaseInsensitiveOption);
 

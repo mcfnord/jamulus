@@ -426,6 +426,18 @@ void CClientSettings::ReadSettingsFromXML ( const QDomDocument& IniXMLDocument, 
         bEnableFeedbackDetection = bValue;
     }
 
+    // Experimental tab (jamfan): the two data-sharing switches. Absent key keeps the client's
+    // own default, so an existing ini does not silently opt anyone out of a new default.
+    if ( GetFlagIniSet ( IniXMLDocument, "client", "clienttelemetry", bValue ) )
+    {
+        pClient->SetClientTelemetryEnabled ( bValue );
+    }
+
+    if ( GetFlagIniSet ( IniXMLDocument, "client", "chaturlreport", bValue ) )
+    {
+        pClient->SetChatUrlReportEnabled ( bValue );
+    }
+
     // connect dialog show all musicians
     if ( GetFlagIniSet ( IniXMLDocument, "client", "connectdlgshowallmusicians", bValue ) )
     {
@@ -908,6 +920,10 @@ void CClientSettings::WriteSettingsToXML ( QDomDocument& IniXMLDocument, bool is
 
     // feedback detection
     SetFlagIniSet ( IniXMLDocument, "client", "enablefeedbackdetection", bEnableFeedbackDetection );
+
+    // Experimental tab (jamfan)
+    SetFlagIniSet ( IniXMLDocument, "client", "clienttelemetry", pClient->GetClientTelemetryEnabled() );
+    SetFlagIniSet ( IniXMLDocument, "client", "chaturlreport", pClient->GetChatUrlReportEnabled() );
 
     // connect dialog show all musicians
     SetFlagIniSet ( IniXMLDocument, "client", "connectdlgshowallmusicians", bConnectDlgShowAllMusicians );

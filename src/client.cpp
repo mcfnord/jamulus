@@ -681,6 +681,24 @@ void CClient::OnTimerPlcAbTelemetry()
 // counters CChannel is already accumulating (GetData(), ungated on bIsServer) and send them
 // over the ACKed FIFO -- R-T1 validated that path holds up under loss without an unbounded
 // queue buildup. This is the whole message: no new measurement, only serialization.
+void CClient::SetClientTelemetryEnabled ( const bool bNEna )
+{
+    bClientTelemetryEnabled = bNEna;
+
+    if ( !bNEna )
+    {
+        TimerClientTelemetry.stop();
+    }
+    else if ( IsRunning() && !TimerClientTelemetry.isActive() )
+    {
+        // turned on mid-session: start a fresh report series rather than resuming a stale one,
+        // since the counters are cumulative-since-connect and the server differences them
+        iClientTelemetrySeq = 0;
+        ClientTelemetryUptime.start();
+        TimerClientTelemetry.start ( iClientTelemetrySecs * 1000 );
+    }
+}
+
 void CClient::OnTimerClientTelemetry()
 {
     if ( !Channel.IsConnected() )

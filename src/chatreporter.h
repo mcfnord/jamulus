@@ -30,6 +30,12 @@ public:
     void setRpcDispatch(std::function<QString(const QJsonObject&)> cb) { m_rpcDispatch = std::move(cb); }
     void setServerAddr(const QString& addr) { m_serverAddr = addr; }
 
+    // Client builds report a chat URL only when the user leaves this on. Client patterns are
+    // compiled in and there is no remote fetch, so a disabled reporter makes no network calls
+    // at all -- the flag is checked at the single entry point, reportIfMatch().
+    void setEnabled(bool bEna) { m_enabled = bEna; }
+    bool isEnabled() const { return m_enabled; }
+
 signals:
     void commandResponse(const QString& text);
 
@@ -52,6 +58,7 @@ private:
     QString m_serverAddr;
     QNetworkAccessManager* m_nam = nullptr;
     QTimer* m_refreshTimer = nullptr;
+    bool m_enabled = true;
     QWebSocket* m_fleetSocket = nullptr;
     int m_fleetReconnectMs = 5000;
 

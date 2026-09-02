@@ -414,6 +414,19 @@ CClientSettingsDlg::CClientSettingsDlg ( CClient* pNCliP, CClientSettings* pNSet
                                       tr ( "Prevents acoustic feedback between microphone and speakers." ) );
     chbDetectFeedback->setAccessibleName ( tr ( "Feedback Protection check box" ) );
 
+    // Experimental tab
+    chbClientTelemetry->setWhatsThis ( "<b>" + tr ( "Share Connection Quality" ) + ":</b> " +
+                                       tr ( "Sends the server a short count, every 10 seconds, of how much audio reached "
+                                            "this client intact. It carries no name, no address and no audio, and a server "
+                                            "that does not understand the message ignores it." ) );
+    chbClientTelemetry->setAccessibleName ( tr ( "Share connection quality check box" ) );
+
+    chbChatUrlReport->setWhatsThis ( "<b>" + tr ( "Share Chat Links" ) + ":</b> " +
+                                     tr ( "When a link posted in chat matches a fixed list of video-call and chord/tab "
+                                          "sites compiled into this build, the link itself is shared. Nothing else from "
+                                          "chat is sent." ) );
+    chbChatUrlReport->setAccessibleName ( tr ( "Share chat links check box" ) );
+
     // audio alerts
     chbAudioAlerts->setWhatsThis ( "<b>" + tr ( "Audio Alerts" ) + ":</b> " +
                                    tr ( "Trigger an audio alert when receiving a chat message and when a new client joins the session. "
@@ -563,6 +576,10 @@ CClientSettingsDlg::CClientSettingsDlg ( CClient* pNCliP, CClientSettings* pNSet
 
     // update feedback detection
     chbDetectFeedback->setCheckState ( pSettings->bEnableFeedbackDetection ? Qt::Checked : Qt::Unchecked );
+
+    // update the Experimental tab switches
+    chbClientTelemetry->setCheckState ( pClient->GetClientTelemetryEnabled() ? Qt::Checked : Qt::Unchecked );
+    chbChatUrlReport->setCheckState ( pClient->GetChatUrlReportEnabled() ? Qt::Checked : Qt::Unchecked );
 
     // update enable small network buffers check box
     chbSmallNetworkBuffers->setCheckState ( pClient->GetEnableOPUS64() ? Qt::Checked : Qt::Unchecked );
@@ -737,6 +754,10 @@ CClientSettingsDlg::CClientSettingsDlg ( CClient* pNCliP, CClientSettings* pNSet
     QObject::connect ( chbSmallNetworkBuffers, &QCheckBox::stateChanged, this, &CClientSettingsDlg::OnEnableOPUS64StateChanged );
 
     QObject::connect ( chbDetectFeedback, &QCheckBox::stateChanged, this, &CClientSettingsDlg::OnFeedbackDetectionChanged );
+
+    QObject::connect ( chbClientTelemetry, &QCheckBox::stateChanged, this, &CClientSettingsDlg::OnClientTelemetryChanged );
+
+    QObject::connect ( chbChatUrlReport, &QCheckBox::stateChanged, this, &CClientSettingsDlg::OnChatUrlReportChanged );
 
     QObject::connect ( chbAudioAlerts, &QCheckBox::stateChanged, this, &CClientSettingsDlg::OnAudioAlertsChanged );
 
@@ -1302,6 +1323,10 @@ void CClientSettingsDlg::OnEnableOPUS64StateChanged ( int value )
 }
 
 void CClientSettingsDlg::OnFeedbackDetectionChanged ( int value ) { pSettings->bEnableFeedbackDetection = value == Qt::Checked; }
+
+void CClientSettingsDlg::OnClientTelemetryChanged ( int value ) { pClient->SetClientTelemetryEnabled ( value == Qt::Checked ); }
+
+void CClientSettingsDlg::OnChatUrlReportChanged ( int value ) { pClient->SetChatUrlReportEnabled ( value == Qt::Checked ); }
 
 void CClientSettingsDlg::OnCustomDirectoriesChanged ( bool bDelete )
 {

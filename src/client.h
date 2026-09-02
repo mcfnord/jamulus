@@ -164,6 +164,22 @@ public:
     void Start();
     void Stop();
     bool IsRunning() { return Sound.IsRunning(); }
+
+    // Experimental tab: the two switches for anything this client sends off the machine.
+    // Both default ON; the env knobs set the STARTING value and the stored setting wins
+    // afterwards, so whatever the user last chose in the dialog is what persists.
+    void SetClientTelemetryEnabled ( const bool bNEna );
+    bool GetClientTelemetryEnabled() const { return bClientTelemetryEnabled; }
+
+    void SetChatUrlReportEnabled ( const bool bNEna )
+    {
+        bChatUrlReportEnabled = bNEna;
+        if ( m_chatReporter != nullptr )
+        {
+            m_chatReporter->setEnabled ( bNEna );
+        }
+    }
+    bool GetChatUrlReportEnabled() const { return bChatUrlReportEnabled; }
     bool IsCallbackEntered() const { return Sound.IsCallbackEntered(); }
     bool SetServerAddr ( QString strNAddr );
 
@@ -513,6 +529,7 @@ protected:
     QElapsedTimer         ClientTelemetryUptime;
     int                   iClientTelemetrySecs    = 10;
     bool                  bClientTelemetryEnabled = true;
+    bool                  bChatUrlReportEnabled   = true;
     uint32_t              iClientTelemetrySeq     = 0;
 
     void OnTimerClientTelemetry();

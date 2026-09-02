@@ -2243,6 +2243,70 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="tab_4_experimental">
+      <attribute name="title">
+       <string>Experimental</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_experimental">
+       <item>
+        <widget class="QLabel" name="lblExperimentalIntro">
+         <property name="text">
+          <string>These are the only things this build sends anywhere. Turn either off at any time; nothing else about the software changes.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="chbClientTelemetry">
+         <property name="text">
+          <string>Share connection quality with the server I am connected to</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblClientTelemetryHint">
+         <property name="text">
+          <string>Every 10 seconds, counts of how much audio arrived intact. No names, no addresses, no audio. Servers that do not understand the message ignore it.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="chbChatUrlReport">
+         <property name="text">
+          <string>Share links posted in chat that match a built-in list</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblChatUrlReportHint">
+         <property name="text">
+          <string>Only the link itself, and only for a fixed list of video-call and chord/tab sites compiled into this build. Nothing else from chat is sent.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_experimental">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
   </layout>

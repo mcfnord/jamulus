@@ -106,6 +106,8 @@ public slots:
     void OnAutoJitBufStateChanged ( int value );
     void OnEnableOPUS64StateChanged ( int value );
     void OnFeedbackDetectionChanged ( int value );
+    void OnClientTelemetryChanged ( int value );
+    void OnChatUrlReportChanged ( int value );
     void OnCustomDirectoriesChanged ( bool bDelete );
     void OnNewClientLevelEditingFinished() { pSettings->iNewClientFaderLevel = edtNewClientLevel->text().toInt(); }
     void OnInputBoostChanged();
