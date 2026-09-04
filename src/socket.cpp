@@ -560,10 +560,18 @@ void CSocket::OnDataReceived()
         {
             // server:
 
-            int iCurChanID;
+            // A blocked source gets no channel and no reply. This must be an early
+            // return, not a short-circuit in the condition below: PutAudioData is the
+            // only writer of iCurChanID, so skipping it would leave the ServerFull
+            // check reading a value this function never assigned.
+            if ( !pServer->CentralDefenseAllows ( RecHostAddr.InetAddr ) )
+            {
+                return;
+            }
 
-            if ( pServer->CentralDefenseAllows ( RecHostAddr.InetAddr ) &&
-                 pServer->PutAudioData ( vecbyRecBuf, iNumBytesRead, RecHostAddr, iCurChanID ) )
+            int iCurChanID = INVALID_CHANNEL_ID;
+
+            if ( pServer->PutAudioData ( vecbyRecBuf, iNumBytesRead, RecHostAddr, iCurChanID ) )
             {
                 // EARLY LOG: Announce new connection as soon as detected
                 pServer->GetLogging()->AddEarlyConnection(RecHostAddr.InetAddr, pServer->GetNumberOfConnectedClients());
