@@ -660,8 +660,7 @@ SOURCES_OPUS = libs/opus/celt/bands.c \
     libs/opus/src/opus_encoder.c \
     libs/opus/src/repacketizer.c
 
-# NEON intrinsic sources: self-contained, need no external library.
-SOURCES_OPUS_ARM_NEON = libs/opus/celt/arm/armcpu.c \
+SOURCES_OPUS_ARM = libs/opus/celt/arm/armcpu.c \
     libs/opus/celt/arm/arm_celt_map.c \
     libs/opus/silk/arm/arm_silk_map.c \
     libs/opus/silk/arm/biquad_alt_neon_intr.c \
@@ -670,13 +669,6 @@ SOURCES_OPUS_ARM_NEON = libs/opus/celt/arm/armcpu.c \
     libs/opus/silk/arm/NSQ_neon.c \
     libs/opus/celt/arm/celt_neon_intr.c \
     libs/opus/celt/arm/pitch_neon_intr.c
-# NE10 sources: FFT/MDCT acceleration via the external Ne10 library, which
-# Jamulus does not bundle (they #include <NE10_dsp.h> unconditionally and are
-# gated on HAVE_ARM_NE10, which we never define). Kept listed for completeness
-# but never added to SOURCES.
-SOURCES_OPUS_ARM_NE10 = libs/opus/celt/arm/celt_fft_ne10.c \
-    libs/opus/celt/arm/celt_mdct_ne10.c
-SOURCES_OPUS_ARM = $$SOURCES_OPUS_ARM_NEON $$SOURCES_OPUS_ARM_NE10
 
 SOURCES_OPUS_X86_SSE = libs/opus/celt/x86/x86cpu.c \
     libs/opus/celt/x86/x86_celt_map.c \
@@ -691,23 +683,16 @@ SOURCES_OPUS_X86_SSE4 = libs/opus/celt/x86/celt_lpc_sse4_1.c \
      libs/opus/silk/x86/VAD_sse4_1.c \
      libs/opus/silk/x86/VQ_WMat_EC_sse4_1.c
 
-contains(QT_ARCH, armeabi-v7a) | contains(QT_ARCH, arm64-v8a) {
-    HEADERS_OPUS += $$HEADERS_OPUS_ARM
-    SOURCES_OPUS_ARCH += $$SOURCES_OPUS_ARM
-    DEFINES_OPUS += OPUS_ARM_PRESUME_NEON=1 OPUS_ARM_PRESUME_NEON_INTR=1
-    contains(QT_ARCH, arm64-v8a):DEFINES_OPUS += OPUS_ARM_PRESUME_AARCH64_NEON_INTR
-} else:contains(QT_ARCH, arm64) {
-    # arm64-v8a above is the Android ABI name; plain arm64 is what Qt reports
-    # for 64-bit ARM everywhere else (Apple Silicon macOS, iOS, Linux aarch64).
-    # NEON is part of the base AArch64 ISA, so the NEON intrinsics can be
-    # presumed present and compiled without special compiler flags (see the
-    # SOURCES_OPUS_ARCH handling below).
-    # OPUS_ARM_MAY_HAVE_NEON_INTR is required in addition to the PRESUME
-    # defines: opus gates the inclusion of its arm/*.h headers on it
+contains(QT_ARCH, armeabi-v7a) | contains(QT_ARCH, arm64-v8a) | contains(QT_ARCH, arm64) {
+    # armeabi-v7a and arm64-v8a are the Android ABI names; plain arm64 is what Qt
+    # reports for 64-bit ARM everywhere else (Apple Silicon macOS, iOS, Linux aarch64).
+    # OPUS_ARM_MAY_HAVE_NEON_INTR is required in addition to the PRESUME defines:
+    # opus gates the inclusion of its arm/*.h headers on it
     # (see libs/opus/celt/pitch.h and libs/opus/celt/cpu_support.h).
     HEADERS_OPUS += $$HEADERS_OPUS_ARM
-    SOURCES_OPUS_ARCH += $$SOURCES_OPUS_ARM_NEON
-    DEFINES_OPUS += OPUS_ARM_MAY_HAVE_NEON_INTR=1 OPUS_ARM_PRESUME_NEON_INTR=1 OPUS_ARM_PRESUME_AARCH64_NEON_INTR=1
+    SOURCES_OPUS_ARCH += $$SOURCES_OPUS_ARM
+    DEFINES_OPUS += OPUS_ARM_MAY_HAVE_NEON_INTR=1 OPUS_ARM_PRESUME_NEON=1 OPUS_ARM_PRESUME_NEON_INTR=1
+    contains(QT_ARCH, arm64-v8a) | contains(QT_ARCH, arm64):DEFINES_OPUS += OPUS_ARM_PRESUME_AARCH64_NEON_INTR
 } else:contains(QT_ARCH, x86) | contains(QT_ARCH, x86_64) {
     HEADERS_OPUS += $$HEADERS_OPUS_X86
     SOURCES_OPUS_ARCH += $$SOURCES_OPUS_X86_SSE $$SOURCES_OPUS_X86_SSE2 $$SOURCES_OPUS_X86_SSE4
@@ -1190,10 +1175,11 @@ contains(CONFIG, "opus_shared_lib") {
             sse4_cc.variable_out = OBJECTS
             QMAKE_EXTRA_COMPILERS += sse_cc sse2_cc sse4_cc
         }
-    } else:contains(QT_ARCH, arm64) {
-        # Unlike the x86 SSE files above, the AArch64 NEON intrinsics need no
-        # special compiler flags (NEON is part of the base AArch64 ISA), so
-        # they can be compiled like any other source file.
+    } else:contains(QT_ARCH, armeabi-v7a) | contains(QT_ARCH, arm64-v8a) | contains(QT_ARCH, arm64) {
+        # Unlike the x86 SSE files above, the NEON intrinsics need no special
+        # compiler flags: NEON is part of the base AArch64 ISA, and the NDK's
+        # clang enables it by default for armv7a-linux-androideabi. So they
+        # can be compiled like any other source file.
         SOURCES += $$SOURCES_OPUS_ARCH
     }
 }
