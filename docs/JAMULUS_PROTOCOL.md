@@ -120,7 +120,7 @@ Connection-based messages (acknowledged; `PROTMESSID_` prefix omitted). Full pay
 | 35 | `SPLIT_MESS_SUPPORTED` | Split messages are supported |
 | 36 | `RAWAUDIO_SUPPORTED` | Raw (uncompressed) audio is supported |
 
-IDs 12, 14, 15, 17, 19, 22 and 28 are legacy messages no longer sent (28, `REQ_CHANNEL_LEVEL_LIST`, is still understood for compatibility with Servers 3.4.6–3.5.12).
+IDs 12, 14, 15, 17, 19 and 22 are legacy messages no longer sent. `REQ_CHANNEL_LEVEL_LIST (28)` is still sent by the Client once per new connection, for compatibility with Servers 3.4.6–3.5.12; current Servers send `CLM_CHANNEL_LEVEL_LIST (1015)` without being asked.
 
 `SPECIAL_SPLIT_MESSAGE (2001)` sits outside both ID ranges because it is not a message in its own right: it is the transport container for the fragments of an oversized connection-based message (see the split message container above), with the original message ID carried inside the container. Each fragment frame has its own sequence counter and is acknowledged and retransmitted like any connection-based message.
 
@@ -168,15 +168,16 @@ The Server on a new Client connection will:
 
 This is defined in `CServer::OnNewConnection()`
 
-The Client on a new connection will:
+For the Client, a new connection begins when the first audio packet from the Server arrives (`CChannel::PutAudioData()` returns `PS_NEW_CONNECTION`). The Server's `REQ_*` messages above have been answered by then; independently of them, the Client will:
 
 - Send its Channel info with a `CHANNEL_INFOS (25, 0x1900)` message
 - Request the list of connected Clients with a `REQ_CONN_CLIENTS_LIST (16, 0x1000)` message
 - Set the Server-side Jitter Buffer value with a `JITT_BUF_SIZE (10, 0x0a00)` message
+- Request the channel level list with a `REQ_CHANNEL_LEVEL_LIST (28, 0x1c00)` message, for compatibility with Servers 3.4.6 to 3.5.12
 
-This is defined in `CClient::OnNewConnection()`
+This is defined in `CClient::OnNewConnection()`. The Client sends these unrequested because the Server may still hold the Client's channel from a previous session, in which case it would not treat this as a new connection and would not send its `REQ_*` messages.
 
-At the end of the session, the Client repeatedly sends a `CLM_DISCONNECTION (1010, 0xf203)` message, until the Server stops streaming audio to it.
+To disconnect, the Client stops sending audio and waits about 100 ms, answering every audio packet that still arrives from the Server in that window with a `CLM_DISCONNECTION (1010, 0xf203)` message; it then sends one final `CLM_DISCONNECTION` and is done (`CClient::Stop()`). The Server disconnects the channel as soon as it receives the message (`CServer::OnCLDisconnection()`). If the message is lost, the Server's channel times out after 30 seconds without audio from the Client (`CON_TIME_OUT_SEC_MAX`).
 
 A typical flow would be:
 
@@ -279,8 +280,8 @@ A Directory is a Jamulus Server acting as a registry (implemented in `src/server
 
 - A Server registers with `CLM_REGISTER_SERVER_EX (1017)` (older versions: `CLM_REGISTER_SERVER (1004)`) and receives `CLM_REGISTER_SERVER_RESP (1016)` carrying the result (registered, list full, version too old, requirements not fulfilled). If no response arrives, registration is retried every 500 ms, up to 5 times.
 - Registration is refreshed every 15 minutes; the Directory drops a Server it has not heard from for 33 minutes. `CLM_UNREGISTER_SERVER (1005)` removes the entry immediately at shutdown or when changing Directory through the Server UI.
-- A Client requests the list with `CLM_REQ_SERVER_LIST (1007)`. The Directory answers with both `CLM_RED_SERVER_LIST (1018)` (a shorter form that reduces UDP fragmentation) and `CLM_SERVER_LIST (1006)` (the full information). The Client then pings each listed Server with `CLM_PING_MS_WITHNUMCLIENTS (1002)` to display latency and occupancy.
-- NAT hole punching: when it answers a list request, the Directory also sends every registered Server a `CLM_SEND_EMPTY_MESSAGE (1008)` carrying the Client's public address; each Server responds by sending `CLM_EMPTY_MESSAGE (1009)` to that address, in order to open its own NAT/firewall for the Client's subsequent packets. It doesn't matter whether the Client receives this message, as it will ignore it. The Directory and its registered Servers also ping each other about once a minute to keep their NAT mappings alive.
+- A Client requests the server list with `CLM_REQ_SERVER_LIST (1007)`. The Directory answers with both `CLM_RED_SERVER_LIST (1018)` (a shorter form that reduces UDP fragmentation) and `CLM_SERVER_LIST (1006)` (the full information). The Client then pings each listed Server with `CLM_PING_MS_WITHNUMCLIENTS (1002)` to display latency and occupancy.
+- NAT hole punching: when it answers a server list request, the Directory also sends every registered Server a `CLM_SEND_EMPTY_MESSAGE (1008)` carrying the Client's public address; each Server responds by sending `CLM_EMPTY_MESSAGE (1009)` to that address, in order to open its own NAT/firewall for the Client's subsequent packets. It doesn't matter whether the Client receives this message, as it will ignore it. The Directory and its registered Servers also ping each other about once a minute to keep their NAT mappings alive.
 
 ---
 
