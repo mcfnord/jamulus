@@ -60,6 +60,6 @@ private:
     QHash<QString, QDateTime> m_allowedCache;
     QMutex m_blockedCacheMutex;
     int m_blockedCacheTtlSeconds = 300;
-    int m_allowedCacheTtlSeconds = 600;
+    int m_allowedCacheTtlSeconds = 300; // match blocked TTL; caps a stale admit at 5 min
     int m_allowedCacheTtlJitterSeconds = 30;
 };
