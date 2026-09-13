@@ -210,6 +210,11 @@ public:
     uint32_t GetCumDragBack() const { return iCumDragBack.load ( std::memory_order_relaxed ); }
     uint32_t GetCumDragFwd() const { return iCumDragFwd.load ( std::memory_order_relaxed ); }
 
+    // fork telemetry: ACK round trip of this channel's reliable messages (protocol.h)
+    uint32_t GetCumAckRttSumMs() const { return Protocol.GetCumAckRttSumMs(); }
+    uint32_t GetCumAckRttN() const { return Protocol.GetCumAckRttN(); }
+    uint32_t GetCumAckRttMaxMs() const { return Protocol.GetCumAckRttMaxMs(); }
+
     // Telemetry v2 group B: ARRIVAL-GAP HISTOGRAM, 8 buckets, in units of the nominal frame
     // period. This is what lets a depth curve be rebuilt for a real player -- §85 produced one
     // for a single radio in this house and it is the most informative artefact the rig made.

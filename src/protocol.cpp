@@ -469,6 +469,8 @@ CProtocol::CProtocol()
     // allocate worst case memory for split part messages
     vecbySplitMessageStorage.Init ( MAX_SIZE_BYTES_NETW_BUF );
 
+    AckClock.start();
+
     Reset();
 
     // Connections -------------------------------------------------------------
@@ -528,6 +530,12 @@ void CProtocol::SendMessage()
         {
             vecMessage.Init ( SendMessQueue.front().vecMessage.Size() );
             vecMessage = SendMessQueue.front().vecMessage;
+
+            if ( SendMessQueue.front().iAttempts == 0 )
+            {
+                SendMessQueue.front().iSentMs = AckClock.elapsed();
+            }
+            SendMessQueue.front().iAttempts++;
 
             // start or restart the ack timeout
             TimerSendMess.start ( SEND_MESS_TIMEOUT_MS );
@@ -687,6 +695,19 @@ void CProtocol::ParseMessageBody ( const CVector<uint8_t>& vecbyMesBodyData, con
                 {
                     if ( ( SendMessQueue.front().iCnt == iRecCounter ) && ( SendMessQueue.front().iID == iData ) )
                     {
+                        // fork telemetry: round trip of a message that was sent exactly once
+                        if ( SendMessQueue.front().iAttempts == 1 )
+                        {
+                            const qint64 iRtt = AckClock.elapsed() - SendMessQueue.front().iSentMs;
+                            if ( iRtt >= 0 )
+                            {
+                                iCumAckRttSumMs.fetch_add ( static_cast<uint32_t> ( iRtt ), std::memory_order_relaxed );
+                                iCumAckRttN.fetch_add ( 1, std::memory_order_relaxed );
+                                uint32_t iMax = iCumAckRttMaxMs.load ( std::memory_order_relaxed );
+                                while ( static_cast<uint32_t> ( iRtt ) > iMax && !iCumAckRttMaxMs.compare_exchange_weak ( iMax, static_cast<uint32_t> ( iRtt ), std::memory_order_relaxed ) ) {}
+                            }
+                        }
+
                         // message acknowledged, remove from queue
                         SendMessQueue.pop_front();
 

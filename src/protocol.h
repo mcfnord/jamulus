@@ -48,6 +48,8 @@
 
 #include <QMutex>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <atomic>
 #include <QDateTime>
 #include <list>
 #include <cmath>
@@ -215,6 +217,10 @@ public:
     void CreateChatTextMes ( const QString strChatText );
     void CreatePlcAbTelemetryMes ( const CPlcAbTelemetry& Tlm ); // TEST-ONLY (plc-ab-tester)
     void CreateClientTelemetryMes ( const CClientTelemetry& Tlm ); // TEST-ONLY (client-telemetry, Step 1)
+
+    uint32_t GetCumAckRttSumMs() const { return iCumAckRttSumMs.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumAckRttN() const { return iCumAckRttN.load ( std::memory_order_relaxed ); }
+    uint32_t GetCumAckRttMaxMs() const { return iCumAckRttMaxMs.load ( std::memory_order_relaxed ); }
     void CreateNetwTranspPropsMes ( const CNetworkTransportProps& NetTrProps );
     void CreateReqNetwTranspPropsMes();
     void CreateReqSplitMessSupportMes();
@@ -278,6 +284,8 @@ protected:
             vecMessage = SendMess.vecMessage;
             iID        = SendMess.iID;
             iCnt       = SendMess.iCnt;
+            iSentMs    = SendMess.iSentMs;
+            iAttempts  = SendMess.iAttempts;
         }
 
         CSendMessage& operator= ( const CSendMessage& NewSendMess )
@@ -287,11 +295,15 @@ protected:
 
             iID  = NewSendMess.iID;
             iCnt = NewSendMess.iCnt;
+            iSentMs    = NewSendMess.iSentMs;
+            iAttempts  = NewSendMess.iAttempts;
             return *this;
         }
 
         CVector<uint8_t> vecMessage;
         int              iID, iCnt;
+        qint64           iSentMs    = 0; // AckClock reading at the FIRST send
+        int              iAttempts  = 0; // sends so far (1 = never retransmitted)
     };
 
     void EnqueueMessage ( CVector<uint8_t>& vecMessage, const int iCnt, const int iID );
@@ -389,6 +401,13 @@ protected:
 
     QTimer TimerSendMess;
     QMutex Mutex;
+
+    // fork telemetry: ACK round trip of our own reliable messages, first-attempt sends only.
+    // On a server this is a per-client RTT that needs nothing from the client (stock or fork).
+    QElapsedTimer         AckClock;
+    std::atomic<uint32_t> iCumAckRttSumMs { 0 };
+    std::atomic<uint32_t> iCumAckRttN { 0 };
+    std::atomic<uint32_t> iCumAckRttMaxMs { 0 };
 
     CVector<uint8_t> vecbySplitMessageStorage;
     int              iSplitMessageCnt;

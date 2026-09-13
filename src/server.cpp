@@ -794,6 +794,12 @@ void CServer::OnTimer()
     // Start(), which would otherwise be differenced against a stale iLastTickNs.
     bool bTickStamped = false;
 
+    // T2 bound: 30 emit-ticks x the 1000 ms ConcealTelemetryTimer == one 30 s telemetry window.
+    // Deliberately equal to the window rather than smaller -- a real preemption of several
+    // seconds must still be recorded; only a value that could not have been SEEN in the window
+    // it is reported in is rejected.
+    static const qint64 TELEM_V2_MAX_PLAUSIBLE_LATE_US = 30LL * 1000LL * 1000LL;
+
     // Telemetry v2 group D: the audio tick's own lateness. Without this, a server that is late
     // looks EXACTLY like every client degrading at once -- and that is also the evidence behind
     // any future "other players here are not affected" claim. §77p/q measured that the audio tick
@@ -805,6 +811,14 @@ void CServer::OnTimer()
         if ( !TickTimer.isValid() )
         {
             TickTimer.start();
+
+            // Stop() invalidated the timer, so start() rebases elapsed to zero -- but iLastTickNs
+            // still holds the LAST tick of the previous occupancy, which can be hours of elapsed
+            // ns. Without this line the next tick differences a near-zero iNowNs against that
+            // stale value and books a hugely NEGATIVE gap, which lands in aiTelemV2TickLateHist[0]
+            // and adds a phantom tick to iTelemV2Ticks once per idle->active transition. It cannot
+            // pin the max (the value is negative), which is why it went unnoticed.
+            iLastTickNs = TickTimer.nsecsElapsed();
         }
         else
         {
@@ -818,13 +832,29 @@ void CServer::OnTimer()
             {
                 iTelemV2TicksLate1ms++;
             }
-            if ( dLateMs > iTelemV2TickMaxLateUs / 1000.0 )
+            // T2 (TODO.md 2026-09-10). WriteTelemetryV2 runs every 30th ConcealTelemetryTimer
+            // tick and that timer is 1000 ms, so one emit window is 30 s and the windowed max is
+            // reset at every write. A lateness longer than that window therefore cannot have been
+            // observed inside it: it is a stretch the timer SPANNED (host suspend, VM migration,
+            // a resumed idle period), not a stall it measured. Latching it pins the lifetime max
+            // forever and makes the number unfalsifiable -- measured on 50.116.25.151:22224,
+            // maxlate 25,853,492,115 us (7.18 h) sitting on the first record after a 14 h 41 m
+            // gap in that port's s2 stream, with the only channel silent (aud=0/26213). Count
+            // such events instead, so they stay visible without destroying the gauge.
+            if ( dLateMs > TELEM_V2_MAX_PLAUSIBLE_LATE_US / 1000.0 )
             {
-                iTelemV2TickMaxLateUs = static_cast<qint64> ( dLateMs * 1000.0 );
+                iTelemV2TickImplausible++;
             }
-            if ( dLateMs > iTelemV2TickWinMaxLateUs / 1000.0 )
+            else
             {
-                iTelemV2TickWinMaxLateUs = static_cast<qint64> ( dLateMs * 1000.0 );
+                if ( dLateMs > iTelemV2TickMaxLateUs / 1000.0 )
+                {
+                    iTelemV2TickMaxLateUs = static_cast<qint64> ( dLateMs * 1000.0 );
+                }
+                if ( dLateMs > iTelemV2TickWinMaxLateUs / 1000.0 )
+                {
+                    iTelemV2TickWinMaxLateUs = static_cast<qint64> ( dLateMs * 1000.0 );
+                }
             }
 
             // Lateness bucketed in multiples of the expected tick period, so the shape means the
@@ -1978,7 +2008,7 @@ void CServer::WriteTelemetryV2()
             strTHist += QString::number ( aiTelemV2TickLateHist[i] );
         }
 
-        out << QString ( "s2 %1 srv=%2 nconn=%3 hw=%4 tick=%5/%6/%7 cfg=%8/%9/%10/%11 cpu=%12,%13 rss=%14 load=%15 skip=%16 thist=%17 tdur=%18/%19 wmax=%20\n" )
+        out << QString ( "s2 %1 srv=%2 nconn=%3 hw=%4 tick=%5/%6/%7 cfg=%8/%9/%10/%11 cpu=%12,%13 rss=%14 load=%15 skip=%16 thist=%17 tdur=%18/%19 wmax=%20 impl=%21\n" )
                    .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
                    .arg ( iTelemV2ServerId )
                    .arg ( GetNumberOfConnectedClients() )
@@ -1995,7 +2025,8 @@ void CServer::WriteTelemetryV2()
                    .arg ( strTHist )
                    .arg ( iTelemV2TickDurSumUs )
                    .arg ( iTelemV2TicksTimed )
-                   .arg ( iTelemV2TickWinMaxLateUs );
+                   .arg ( iTelemV2TickWinMaxLateUs )
+                   .arg ( iTelemV2TickImplausible ); // impl= T2: lateness rejected as unobservable
 
         // Windowed max resets right after the write, so each pass reports THIS window's worst
         // tick. The lifetime max stays in tick=%7; differencing a max is meaningless, which is
@@ -2143,6 +2174,14 @@ void CServer::WriteTelemetryV2()
                    .arg ( vecChannels[iChanID].GetSeqTotRecv() )
                    .arg ( vecChannels[iChanID].GetSeqTotSpan() )
                    .arg ( vecChannels[iChanID].GetSeqTotDup() );
+
+        // ackrtt= : sum_ms/n/max_ms of the ACK round trip of the server's own reliable messages to
+        // this channel, first-attempt sends only. A per-client RTT that needs nothing from the
+        // client. Cumulative and monotonic; difference two samples for an interval mean.
+        out << QString ( " ackrtt=%1/%2/%3" )
+                   .arg ( vecChannels[iChanID].GetCumAckRttSumMs() )
+                   .arg ( vecChannels[iChanID].GetCumAckRttN() )
+                   .arg ( vecChannels[iChanID].GetCumAckRttMaxMs() );
 
         // CONCEALMENT CAUSE (OPEN-TEST-PLANS.md 127k). conceal= above says a block was missing;
         // this says why its slot was empty. Self-checking by construction:

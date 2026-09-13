@@ -401,6 +401,10 @@ protected:
     quint64  iTelemV2TicksTimed       = 0;
     qint64   iTelemV2TickWinMaxLateUs = 0; // windowed: reset after every s2 write
     quint32  aiTelemV2TickLateHist[8] = {};
+    // T2: a lateness longer than the emit period cannot have been OBSERVED inside one window,
+    // so it is a gap the timer spanned, not a stall it measured. Counted here, never latched
+    // into either max. See TELEM_V2_MAX_PLAUSIBLE_LATE_US in server.cpp.
+    quint64  iTelemV2TickImplausible  = 0;
     QString  strTelemV2Path;
     QTimer              TimerCapacityLog;
 
