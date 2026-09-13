@@ -23,6 +23,12 @@ public:
 
     void start();
     void reportIfMatch(const QString& text);
+    // For chat a CLIENT received. The server stamps every message a channel sent with
+    // "<font color=...>(time) <b>name</b></font> "; anything without that stamp was
+    // injected by the server itself -- the welcome message (prefixed on stock servers,
+    // raw HTML when JamFan22 pushes one over the RPC channel), or an [Ear] announcement.
+    // Only stamped messages are chat sent during this session, so only they are reported.
+    void reportIfMatchFromChat(const QString& formattedText);
     void reportSongIfMatch(const QString& rawText);
     void checkCommand(const QString& text, int port, const QHostAddress& clientAddr = QHostAddress());
     void reportClientInfo(const QHostAddress& addr, const QString& name, int countryId, int instrument, int channelId);
@@ -44,12 +50,21 @@ private slots:
     void refreshPatterns();
     void onFleetMessage(const QString& text);
     void onFleetDisconnected();
+    void onFleetPong(quint64 elapsedTime, const QByteArray& payload);
+    void onFleetPongTimeout();
 
 private:
     void fetchPatterns();
     void postUrl(const QString& url);
     void postSong(const QString& title);
     void connectFleetSocket();
+    // Heartbeat over the fleet RPC channel. Without it the ONLY thing that triggers a
+    // reconnect is QWebSocket::disconnected, and a path that dies without a FIN or RST
+    // never emits it -- both ends sit ESTABLISHED and the room is silently unreachable
+    // (measured 2026-09-12: Spectre Rising dropped every welcome for 24.4 h this way).
+    void startFleetHeartbeat();
+    void stopFleetHeartbeat();
+    void scheduleFleetReconnect();
 
     QUrl m_patternUrl;
     QUrl m_reportUrl;
@@ -61,6 +76,8 @@ private:
     bool m_enabled = true;
     QWebSocket* m_fleetSocket = nullptr;
     int m_fleetReconnectMs = 5000;
+    QTimer* m_fleetPingTimer = nullptr;
+    QTimer* m_fleetPongTimer = nullptr;
 
     std::function<void(int, const QString&)> m_welcomeCallback;
     std::function<QString(const QJsonObject&)> m_rpcDispatch;
@@ -70,4 +87,10 @@ private:
 
     static constexpr int FETCH_TIMEOUT_MS = 5000;
     static constexpr int FLEET_RECONNECT_MAX_MS = 60000;
+    // 30 s does double duty: it detects a dead channel in ~45 s instead of never, AND keeps
+    // the NAT mapping alive, so it should PREVENT the idle-timeout drop rather than only
+    // catching it. Slower than a few seconds on purpose -- the failure it replaces took
+    // 24.4 h to notice, and this multiplies by every room on every host.
+    static constexpr int FLEET_PING_INTERVAL_MS = 30000;
+    static constexpr int FLEET_PONG_TIMEOUT_MS = 15000;
 };

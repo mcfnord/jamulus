@@ -1,5 +1,6 @@
 #include "chatreporter.h"
 #include "jamuluslookups.h"
+#include "global.h"
 
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -119,9 +120,32 @@ void ChatReporter::onPatternsFetched()
     qCInfo(lcChatReporter) << "loaded" << newPatterns.size() << "patterns";
 }
 
+void ChatReporter::reportIfMatchFromChat(const QString& formattedText)
+{
+    // Measured 2026-09-11 against an upstream server and the live lounge:
+    //   chat    "<font color=\"mediumblue\">(02:37:01 PM) <b>fmt probe</b></font> check this https://..."
+    //   welcome "<b>Server Welcome Message:</b> Our video room: https://..."   (stock server)
+    //   welcome "<br><big>You've joined Hot Texas!</big><br><a href=...>"      (pushed by JamFan22)
+    // Only the first is a message somebody sent during this session.
+    static const QRegularExpression chatStampRe(
+        QStringLiteral(R"(^<font color="[^"]*">\([^<]*\) <b>.*</b></font> )"));
+
+    if (!chatStampRe.match(formattedText).hasMatch())
+        return;
+
+    reportIfMatch(formattedText);
+}
+
 void ChatReporter::reportIfMatch(const QString& text)
 {
     if (!m_enabled)
+        return;
+
+    // The server sends its welcome message as a chat text message to every client the
+    // moment it connects, so a URL sitting in that message would be reported on every
+    // single join and show up as if someone had just posted it. Only chat sent during
+    // the session counts. This is the same test clientdlg.cpp uses to spot the welcome.
+    if (text.startsWith(QLatin1String(WELCOME_MESSAGE_PREFIX)))
         return;
 
     static const QRegularExpression urlRe(QStringLiteral(R"(https?://[^\s<>"']+)"),
@@ -272,6 +296,8 @@ void ChatReporter::postUrl(const QString& url)
 
 void ChatReporter::connectFleetSocket()
 {
+    stopFleetHeartbeat();
+
     if (m_fleetSocket) {
         m_fleetSocket->disconnect(this);
         m_fleetSocket->abort();
@@ -282,9 +308,11 @@ void ChatReporter::connectFleetSocket()
     m_fleetSocket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
     connect(m_fleetSocket, &QWebSocket::textMessageReceived, this, &ChatReporter::onFleetMessage);
     connect(m_fleetSocket, &QWebSocket::disconnected, this, &ChatReporter::onFleetDisconnected);
+    connect(m_fleetSocket, &QWebSocket::pong, this, &ChatReporter::onFleetPong);
     connect(m_fleetSocket, &QWebSocket::connected, this, [this]() {
         qCInfo(lcChatReporter) << "[fleet-rpc-channel] connected port=" << m_port;
         m_fleetReconnectMs = 5000;
+        startFleetHeartbeat();
     });
 
     QUrl url(QStringLiteral("wss://jamulus.live/fleet-rpc-channel"));
@@ -313,7 +341,74 @@ void ChatReporter::onFleetMessage(const QString& text)
 
 void ChatReporter::onFleetDisconnected()
 {
+    // Log text is byte-identical to what it has always been: anything grepping this
+    // marker in the journal keeps working, and 'disconnected' contains 'connected' as a
+    // substring (mistake 40), so paired-marker parsers must not see a new spelling.
     qCInfo(lcChatReporter) << "[fleet-rpc-channel] disconnected — reconnecting in" << m_fleetReconnectMs << "ms";
+    scheduleFleetReconnect();
+}
+
+void ChatReporter::startFleetHeartbeat()
+{
+    if (!m_fleetPingTimer) {
+        m_fleetPingTimer = new QTimer(this);
+        m_fleetPingTimer->setInterval(FLEET_PING_INTERVAL_MS);
+        connect(m_fleetPingTimer, &QTimer::timeout, this, [this]() {
+            if (!m_fleetSocket)
+                return;
+            // One ping outstanding at a time: the deadline timer is armed here and
+            // disarmed by the pong, so a second ping never hides a missing first one.
+            if (m_fleetPongTimer->isActive())
+                return;
+            m_fleetSocket->ping();
+            m_fleetPongTimer->start(FLEET_PONG_TIMEOUT_MS);
+        });
+    }
+    if (!m_fleetPongTimer) {
+        m_fleetPongTimer = new QTimer(this);
+        m_fleetPongTimer->setSingleShot(true);
+        connect(m_fleetPongTimer, &QTimer::timeout, this, &ChatReporter::onFleetPongTimeout);
+    }
+    m_fleetPongTimer->stop();
+    m_fleetPingTimer->start();
+}
+
+void ChatReporter::stopFleetHeartbeat()
+{
+    if (m_fleetPingTimer)
+        m_fleetPingTimer->stop();
+    if (m_fleetPongTimer)
+        m_fleetPongTimer->stop();
+}
+
+void ChatReporter::onFleetPong(quint64 elapsedTime, const QByteArray&)
+{
+    Q_UNUSED(elapsedTime)
+    if (m_fleetPongTimer)
+        m_fleetPongTimer->stop();
+}
+
+void ChatReporter::onFleetPongTimeout()
+{
+    qCWarning(lcChatReporter) << "[fleet-rpc-channel] no pong within" << FLEET_PONG_TIMEOUT_MS
+                              << "ms — channel dead, rebuilding socket";
+
+    // Rebuild the SOCKET, never restart the process: a control-channel fault must not
+    // kick players off the audio path (convention 8). Detach our handlers first so
+    // abort() cannot re-enter onFleetDisconnected() and double-schedule a reconnect.
+    if (m_fleetSocket) {
+        m_fleetSocket->disconnect(this);
+        m_fleetSocket->abort();
+    }
+    scheduleFleetReconnect();
+}
+
+void ChatReporter::scheduleFleetReconnect()
+{
+    // Always route through the existing backoff, never straight to connectFleetSocket():
+    // a jamulus.live restart times out every room on every host at the same moment, and
+    // this backoff is the only thing between that and a fleet-wide redial storm.
+    stopFleetHeartbeat();
     QTimer::singleShot(m_fleetReconnectMs, this, &ChatReporter::connectFleetSocket);
     m_fleetReconnectMs = qMin(m_fleetReconnectMs * 2, FLEET_RECONNECT_MAX_MS);
 }
