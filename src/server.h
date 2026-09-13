@@ -405,6 +405,13 @@ protected:
     // so it is a gap the timer spanned, not a stall it measured. Counted here, never latched
     // into either max. See TELEM_V2_MAX_PLAUSIBLE_LATE_US in server.cpp.
     quint64  iTelemV2TickImplausible  = 0;
+    // TIER 2, TELEMETRY-PLAN.md section 2: "correctness signals are computed and thrown away
+    // every frame". These three were. Written on the audio/socket path, read on the telemetry
+    // timer, so relaxed atomics -- matching the ackrtt counters rather than the older plain
+    // members beside them. Incremented ONLY on the error branch, so the common path is unchanged.
+    std::atomic<quint64> iTelemV2DecodeErr { 0 };     // opus_custom_decode returned < 0
+    std::atomic<quint64> iTelemV2PutProtErr { 0 };    // PS_PROT_ERR: wrong-size packet
+    std::atomic<quint64> iTelemV2PutAudInvalid { 0 }; // PS_AUDIO_INVALID: unexpected source
     QString  strTelemV2Path;
     QTimer              TimerCapacityLog;
 

@@ -1279,11 +1279,21 @@ void CServer::DecodeReceiveData ( const int iChanCnt, const int iNumClients )
                 // OPUS decode received data stream
                 if ( CurOpusDecoder != nullptr )
                 {
+                    // The return was assigned to a variable literally named iUnused. It is the
+                    // decoder telling us the packet did not decode, once per frame, and it was
+                    // discarded -- TELEMETRY-PLAN.md section 2. Counted now; the value itself is
+                    // not kept, because a count of failures is the signal and a per-frame error
+                    // code has nowhere to go on this path.
                     iUnused = opus_custom_decode ( CurOpusDecoder,
                                                    pCurCodedData,
                                                    iCeltNumCodedBytes,
                                                    &vecvecsData[iChanCnt][iOffset],
                                                    iClientFrameSizeSamples );
+
+                    if ( iUnused < 0 )
+                    {
+                        iTelemV2DecodeErr.fetch_add ( 1, std::memory_order_relaxed );
+                    }
                 }
             }
             else if ( pCurCodedData != nullptr )
@@ -2008,7 +2018,7 @@ void CServer::WriteTelemetryV2()
             strTHist += QString::number ( aiTelemV2TickLateHist[i] );
         }
 
-        out << QString ( "s2 %1 srv=%2 nconn=%3 hw=%4 tick=%5/%6/%7 cfg=%8/%9/%10/%11 cpu=%12,%13 rss=%14 load=%15 skip=%16 thist=%17 tdur=%18/%19 wmax=%20 impl=%21\n" )
+        out << QString ( "s2 %1 srv=%2 nconn=%3 hw=%4 tick=%5/%6/%7 cfg=%8/%9/%10/%11 cpu=%12,%13 rss=%14 load=%15 skip=%16 thist=%17 tdur=%18/%19 wmax=%20 impl=%21 decerr=%22 putbad=%23/%24\n" )
                    .arg ( QDateTime::currentDateTimeUtc().toString ( Qt::ISODate ) )
                    .arg ( iTelemV2ServerId )
                    .arg ( GetNumberOfConnectedClients() )
@@ -2026,7 +2036,10 @@ void CServer::WriteTelemetryV2()
                    .arg ( iTelemV2TickDurSumUs )
                    .arg ( iTelemV2TicksTimed )
                    .arg ( iTelemV2TickWinMaxLateUs )
-                   .arg ( iTelemV2TickImplausible ); // impl= T2: lateness rejected as unobservable
+                   .arg ( iTelemV2TickImplausible ) // impl= T2: lateness rejected as unobservable
+                   .arg ( iTelemV2DecodeErr.load ( std::memory_order_relaxed ) )
+                   .arg ( iTelemV2PutProtErr.load ( std::memory_order_relaxed ) )
+                   .arg ( iTelemV2PutAudInvalid.load ( std::memory_order_relaxed ) );
 
         // Windowed max resets right after the write, so each pass reports THIS window's worst
         // tick. The lifetime max stays in tick=%7; differencing a max is meaningless, which is
@@ -2183,6 +2196,24 @@ void CServer::WriteTelemetryV2()
                    .arg ( vecChannels[iChanID].GetCumAckRttN() )
                    .arg ( vecChannels[iChanID].GetCumAckRttMaxMs() );
 
+        // TIER 4 -- everything here is something a STOCK client already tells this server, or
+        // that the server already computes about it, and then dropped on the floor.
+        //   splitcap=  : the client answered our split-message-support request, so it is new
+        //                enough to know that message. A one-bit version FLOOR, and the only
+        //                client-capability signal that travels client->server at all. NOTE what
+        //                is NOT here: the client's version and OS. PROTMESSID_VERSION_AND_OS
+        //                runs SERVER->CLIENT only (server.cpp:625, "for feature activation in
+        //                the client"); no Jamulus client ever tells a server what it is.
+        //   selfgain=  : this player's own fader ON THEMSELVES, per mille. The server already
+        //                reads the whole per-pair gain matrix every mix pass (MixEncodeTransmitData)
+        //                and the personal mix includes the player's own channel, so a non-zero
+        //                value means they are hearing themselves at a full round trip. Paired
+        //                with ackrtt= above, that is the whole "should you monitor locally?"
+        //                question, answered without asking the client anything.
+        out << QString ( " splitcap=%1 selfgain=%2" )
+                   .arg ( vecChannels[iChanID].GetSplitMessageSupported() ? 1 : 0 )
+                   .arg ( static_cast<int> ( vecChannels[iChanID].GetGain ( iChanID ) * 1000.0f + 0.5f ) );
+
         // CONCEALMENT CAUSE (OPEN-TEST-PLANS.md 127k). conceal= above says a block was missing;
         // this says why its slot was empty. Self-checking by construction:
         // never+late+early == conceal='s numerator, because the three cases partition every
@@ -2309,10 +2340,23 @@ bool CServer::PutAudioData ( const CVector<uint8_t>& vecbyRecBuf, const int iNum
     if ( iCurChanID != INVALID_CHANNEL_ID )
     {
         // put packet in socket buffer
-        if ( vecChannels[iCurChanID].PutAudioData ( vecbyRecBuf, iNumBytesRead, HostAdr ) == PS_NEW_CONNECTION )
+        const EPutDataStat eStat = vecChannels[iCurChanID].PutAudioData ( vecbyRecBuf, iNumBytesRead, HostAdr );
+
+        if ( eStat == PS_NEW_CONNECTION )
         {
             // in case we have a new connection return this information
             bNewConnection = true;
+        }
+        // The status was previously compared to PS_NEW_CONNECTION and otherwise DISCARDED, so
+        // the two error states the channel reports -- a wrong-size packet and a packet from an
+        // unexpected source -- were invisible on the server (TELEMETRY-PLAN.md section 2).
+        else if ( eStat == PS_PROT_ERR )
+        {
+            iTelemV2PutProtErr.fetch_add ( 1, std::memory_order_relaxed );
+        }
+        else if ( eStat == PS_AUDIO_INVALID )
+        {
+            iTelemV2PutAudInvalid.fetch_add ( 1, std::memory_order_relaxed );
         }
     }
 

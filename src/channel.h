@@ -210,6 +210,14 @@ public:
     uint32_t GetCumDragBack() const { return iCumDragBack.load ( std::memory_order_relaxed ); }
     uint32_t GetCumDragFwd() const { return iCumDragFwd.load ( std::memory_order_relaxed ); }
 
+    // fork telemetry (tier 4): the ONE client capability that actually travels client->server.
+    // The server ASKS (PROTMESSID_REQ_SPLIT_MESS_SUPPORT, server.cpp:574) and a client new
+    // enough to understand the request answers (channel.cpp OnReqSplitMessSupport); an older
+    // client simply never replies, so the flag stays false. That makes it a one-bit version
+    // FLOOR on the connected client -- which is as close to a client version as a Jamulus
+    // server can get. See the note on GetClientOSType's removal in TODO.md 2026-09-13.
+    bool GetSplitMessageSupported() { return Protocol.GetSplitMessageSupported(); }
+
     // fork telemetry: ACK round trip of this channel's reliable messages (protocol.h)
     uint32_t GetCumAckRttSumMs() const { return Protocol.GetCumAckRttSumMs(); }
     uint32_t GetCumAckRttN() const { return Protocol.GetCumAckRttN(); }

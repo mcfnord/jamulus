@@ -203,6 +203,10 @@ public:
 
     void Reset();
     void SetSplitMessageSupported ( const bool bIn ) { bSplitMessageSupported = bIn; }
+    // fork telemetry: on a SERVER this is a property of the connected client -- it is only ever
+    // set true by the client's reply to our request -- so it is a client-capability bit, not
+    // one of ours.
+    bool GetSplitMessageSupported() const { return bSplitMessageSupported; }
 
     void CreateJitBufMes ( const int iJitBufSize );
     void CreateReqJitBufMes();
