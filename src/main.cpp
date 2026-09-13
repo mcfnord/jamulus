@@ -983,6 +983,10 @@ int main ( int argc, char** argv )
             CClientSettings Settings ( &Client, strIniFileName );
             Settings.Load ( CommandLineOptions );
             Client.SetSettings ( &Settings );
+            if ( !bUseGUI )
+            {
+                Client.SetHeadlessPing ( true ); // fork: see CClient::TimerHeadlessPing
+            }
 
 #    ifndef NO_JSON_RPC
             if ( pRpcServer )

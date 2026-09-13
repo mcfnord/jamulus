@@ -93,7 +93,8 @@ CClient::CClient ( const quint16  iPortNumber,
     bEnableIPv6 ( bNEnableIPv6 ),
     bMuteMeInPersonalMix ( bNMuteMeInPersonalMix ),
     iServerSockBufNumFrames ( DEF_NET_BUF_SIZE_NUM_BL ),
-    bRawAudioIsSupported ( false )
+    bRawAudioIsSupported ( false ),
+    iCurPingTime ( 0 )
 {
     int iOpusError;
 
@@ -162,7 +163,7 @@ CClient::CClient ( const quint16  iPortNumber,
         0,
         this);
     m_chatReporter->start();
-    QObject::connect ( this, &CClient::ChatTextReceived, m_chatReporter, &ChatReporter::reportIfMatch );
+    QObject::connect ( this, &CClient::ChatTextReceived, m_chatReporter, &ChatReporter::reportIfMatchFromChat );
 
     QObject::connect ( &Channel, &CChannel::ClientIDReceived, this, &CClient::OnClientIDReceived );
 
@@ -229,6 +230,11 @@ CClient::CClient ( const quint16  iPortNumber,
 
     QObject::connect ( &TimerGainOrPan, &QTimer::timeout, this, &CClient::OnTimerRemoteChanGainOrPan );
 
+    // fork (upstream #3874 direction B): without a GUI nobody sends the CLM ping, so iCurPingTime
+    // is never written and the gain/pan limiter sits at its 50 ms floor. Only started when main.cpp
+    // says there is no GUI; the GUI keeps its own timer in CClientDlg.
+    QObject::connect ( &TimerHeadlessPing, &QTimer::timeout, this, [this]() { CreateCLPingMes(); } );
+
     // TEST-ONLY (plc-ab-tester): read the A/B knobs once and wire the timers
     {
         const char* pEnv;
@@ -239,7 +245,13 @@ CClient::CClient ( const quint16  iPortNumber,
         if ( ( pEnv = getenv ( "JAM_AB_ARMS" ) ) )
         {
             QVector<int> vecParsed;
-            for ( const QString& strArm : QString ( pEnv ).split ( ',', Qt::SkipEmptyParts ) )
+            for ( const QString& strArm : QString ( pEnv ).split ( ',',
+#if QT_VERSION >= QT_VERSION_CHECK( 5, 14, 0 )
+                                                                    Qt::SkipEmptyParts
+#else
+                                                                    QString::SkipEmptyParts
+#endif
+            ) )
             {
                 bool      bOk    = false;
                 const int iValue = strArm.trimmed().toInt ( &bOk );
@@ -738,11 +750,14 @@ void CClient::OnTimerClientTelemetry()
     Tlm.iClipCum           = iPlcAbClipCum.load ( std::memory_order_relaxed );
     Tlm.iKbps              = static_cast<uint16_t> ( qBound ( 0, Channel.GetUploadRateKbps(), 65535 ) );
 
-    // ping= and delay= are ZERO on a headless client and that is not a bug in this record:
+    // ping= and delay= read 0 on a headless client and that is not a bug in this record:
     // iCurPingTime is only ever written when a CLM ping REPLY arrives (client.cpp
     // OnCLPingReceived), and the only code that sends those pings on a connected session is
     // the GUI's own timer in CClientDlg. A `-n` client therefore never measures its ping, so
     // the field reports what the client actually knows rather than inventing a number here.
+    // The 0 is the ctor initialiser (upstream #3874: the member was uninitialised, and
+    // valgrind flagged the read); measured 2026-09-07 on rig-c2, 40 + 80 headless c2 records
+    // before and after the initialiser, every one ping=0.
     Tlm.iPingMs  = static_cast<uint16_t> ( qBound ( 0, iCurPingTime, 65535 ) );
     Tlm.iDelayMs = static_cast<uint16_t> ( qBound ( 0, EstimatedOverallDelay ( iCurPingTime ), 65535 ) );
 
@@ -1336,6 +1351,11 @@ void CClient::Start()
     // start audio interface
     Sound.Start();
 
+    if ( bHeadlessPing )
+    {
+        TimerHeadlessPing.start ( PING_UPDATE_TIME_MS );
+    }
+
 #if defined( Q_OS_WINDOWS )
     // Disable hibernation or display dimming if the app is running on Windows
     SetThreadExecutionState ( ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED );
@@ -1350,6 +1370,7 @@ void CClient::Stop()
 
     // TEST-ONLY (client-telemetry, Step 1)
     TimerClientTelemetry.stop();
+    TimerHeadlessPing.stop();
 
     // stop audio interface
     Sound.Stop();

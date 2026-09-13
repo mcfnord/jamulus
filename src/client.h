@@ -311,6 +311,17 @@ public:
     void CreateChatTextMes ( const QString& strChatText ) { Channel.CreateChatTextMes ( strChatText ); }
 
     void CreateCLPingMes() { ConnLessProtocol.CreateCLPingMes ( Channel.GetAddress(), PreparePingMessage() ); }
+    // The ctor already connected (strConnOnStartupAddress -> Start()) before main.cpp can call this,
+    // so start the timer here too when the client is already running (measured 2026-09-07: without
+    // this, zero pings left the Pi vantage).
+    void SetHeadlessPing ( const bool bEnable )
+    {
+        bHeadlessPing = bEnable;
+        if ( bEnable && IsRunning() )
+        {
+            TimerHeadlessPing.start ( PING_UPDATE_TIME_MS );
+        }
+    }
 
     void CreateCLServerListPingMes ( const CHostAddress& InetAddr )
     {
@@ -460,6 +471,7 @@ protected:
     // for gain or pan rate limiting
     QMutex MutexGainOrPan;
     QTimer TimerGainOrPan;
+    QTimer TimerHeadlessPing; // fork: a -n client pings the server itself (upstream #3874, direction B)
 
     // TEST-ONLY (plc-ab-tester): within-tester A/B of the OPUS64 encoders'
     // OPUS_SET_PACKET_LOSS_PERC, plus telemetry back to the server. The
@@ -538,6 +550,7 @@ protected:
     int    minGainOrPanId;
     int    maxGainOrPanId;
     int    iCurPingTime;
+    bool   bHeadlessPing = false;
 
 protected slots:
     void OnHandledSignal ( int sigNum );

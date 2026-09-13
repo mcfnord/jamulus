@@ -294,6 +294,7 @@ LED bar:      lbr
 #define SETTING_TAB_AUDIONET 1
 #define SETTING_TAB_ADVANCED 2
 #define SETTING_TAB_MIDI     3
+#define SETTING_TAB_EXPERIMENTAL 4
 
 // common tool tip bottom line text
 #define TOOLTIP_COM_END_TEXT \

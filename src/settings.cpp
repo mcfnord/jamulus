@@ -836,7 +836,7 @@ void CClientSettings::ReadSettingsFromXML ( const QDomDocument& IniXMLDocument, 
     }
 
     // selected Settings Tab
-    if ( GetNumericIniSet ( IniXMLDocument, "client", "settingstab", 0, 3, iValue ) )
+    if ( GetNumericIniSet ( IniXMLDocument, "client", "settingstab", 0, SETTING_TAB_EXPERIMENTAL, iValue ) )
     {
         iSettingsTab = iValue;
     }
