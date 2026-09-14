@@ -1062,7 +1062,7 @@ int main ( int argc, char** argv )
             {
                 new CServerRpc ( &Server, pRpcServer, pRpcServer );
                 Server.SetChatReporterWelcomeCallback ( [&Server] ( int ch, const QString& msg ) {
-                    Server.SendChatToChannel ( ch, msg );
+                    Server.SendChatTextToConChannel ( ch, msg );
                 } );
                 Server.SetChatReporterRpcDispatch ( [pRpcServer] ( const QJsonObject& msg ) -> QString {
                     return pRpcServer->DispatchTrusted ( msg );

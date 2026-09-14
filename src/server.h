@@ -218,7 +218,7 @@ public:
     CServerLogging* GetLogging() { return &Logging; }
     bool CentralDefenseAllows(const QHostAddress& addr) { return !m_centralDefense || m_centralDefense->shouldAllow(addr); }
 
-    void SendChatToChannel ( const int iChanNum, const QString& strMsg );
+    bool SendChatTextToConChannel ( const int iCurChanID, const QString& strChatText );
     void BroadcastChatMessage ( const QString& strMsg );
     void SetChatReporterWelcomeCallback ( std::function<void(int, const QString&)> cb );
     void SetChatReporterRpcDispatch ( std::function<QString(const QJsonObject&)> cb );

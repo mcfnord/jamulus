@@ -48,6 +48,8 @@
 #include "serverrpc.h"
 #include "jamuluslookups.h"
 
+#define INVALID_CLIENT_ID -1
+
 static QString AudComprTypeToString ( const EAudComprType eAudComprType )
 {
     switch ( eAudComprType )
@@ -349,11 +351,45 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
         response["result"] = "ok";
     } );
 
+    // One implementation, two spellings. The body is upstream's
+    // `jamulusserver/privateChatMessage`; this fork's older `jamulusserver/sendClientChatMessage`
+    // stays registered as a thin alias so existing callers keep working across the deploy --
+    // JamFan22's welcome delivery on jamulus.live above all. Drop the alias only once those
+    // callers have moved to the upstream name.
+    auto sendPrivateChat = [=] ( const int id, const QString& chatMessage, QJsonObject& response ) {
+        if ( chatMessage.isEmpty() || chatMessage.size() > MAX_LEN_CHAT_TEXT )
+        {
+            response["error"] =
+                CRpcServer::CreateJsonRpcError ( CRpcServer::iErrInvalidParams, "Invalid params: chatMessage is not a string or malformed" );
+            return;
+        }
+
+        if ( !pServer->SendChatTextToConChannel ( id, chatMessage ) )
+        {
+            response["error"] = "invalid channel ID";
+            return;
+        }
+        response["result"] = "ok";
+    };
+
+    /// @rpc_method jamulusserver/privateChatMessage
+    /// @brief Sends a chat message to a single connected client.
+    /// @param {string} params.chatMessage - The chat message text.
+    /// @param {number} params.id - The client's channel id.
+    /// @result {string} result - "ok" or "error" if bad arguments.
+    pRpcServer->HandleMethod ( "jamulusserver/privateChatMessage", [=] ( const QJsonObject& params, QJsonObject& response ) {
+        sendPrivateChat ( params["id"].toInt ( INVALID_CLIENT_ID ), params["chatMessage"].toString(), response );
+    } );
+
     /// @rpc_method jamulusserver/sendClientChatMessage
-    /// @brief Sends a chat message to a single connected client by channel ID.
+    /// @brief DEPRECATED alias for jamulusserver/privateChatMessage. Use that instead.
     /// @param {number} params.channelId - The channel slot to target.
     /// @param {string} params.message   - The HTML message to deliver.
     /// @result {string} result - "ok" on success, error if channelId is invalid or client not connected.
+    /// @note The parameter names are unchanged, but the RESULT is now upstream's: an invalid or
+    ///       disconnected channel returns "invalid channel ID" where this method used to answer
+    ///       "ok" and silently drop the message. That is the point of the migration -- a caller
+    ///       could not previously detect a failed delivery -- but it IS a behaviour change.
     pRpcServer->HandleMethod ( "jamulusserver/sendClientChatMessage", [=] ( const QJsonObject& params, QJsonObject& response ) {
         auto jsonChannelId = params["channelId"];
         auto jsonMessage   = params["message"];
@@ -369,8 +405,7 @@ CServerRpc::CServerRpc ( CServer* pServer, CRpcServer* pRpcServer, QObject* pare
             return;
         }
 
-        pServer->SendChatToChannel ( jsonChannelId.toInt(), jsonMessage.toString() );
-        response["result"] = "ok";
+        sendPrivateChat ( jsonChannelId.toInt(), jsonMessage.toString(), response );
     } );
 
 }

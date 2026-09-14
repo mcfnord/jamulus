@@ -1678,10 +1678,18 @@ void CServer::SetChatReporterRpcDispatch ( std::function<QString(const QJsonObje
         m_chatReporter->setRpcDispatch ( std::move ( cb ) );
 }
 
-void CServer::SendChatToChannel ( const int iChanNum, const QString& strMsg )
+bool CServer::SendChatTextToConChannel ( const int iCurChanID, const QString& strChatText )
 {
-    if ( iChanNum >= 0 && iChanNum < iMaxNumChannels && vecChannels[iChanNum].IsConnected() )
-        vecChannels[iChanNum].CreateChatTextMes ( strMsg );
+    // Check if iCurChanID is in range [0, iMaxNumChannels) and the channel is connected.
+    // Upstream writes this as MathUtils::InRange<int> ( iCurChanID, 0, iMaxNumChannels );
+    // this tree has no MathUtils::InRange, so the same predicate is spelled out.
+    if ( iCurChanID < 0 || iCurChanID >= iMaxNumChannels || !vecChannels[iCurChanID].IsConnected() )
+    {
+        return false;
+    }
+    // send message
+    vecChannels[iCurChanID].CreateChatTextMes ( strChatText );
+    return true;
 }
 
 void CServer::BroadcastChatMessage ( const QString& strMsg )
