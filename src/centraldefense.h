@@ -56,6 +56,16 @@ private:
     int m_lookupStartSpacingMs = 1000;
     int m_lookupTimeoutSeconds = 2;
 
+    // FU210. Both log sites below are reached once per PACKET -- socket.cpp:567 calls
+    // shouldAllow() for every datagram and a client sends ~187/s -- and the cache stays missing
+    // until the async lookup returns. Measured 2026-09-15 on 130.61.155.141: 109,770 lines from
+    // 528 real lookups (208x), 58.5% of that host's journal, with 50.116.25.151 down to under a
+    // day of retention. Suppressed events are COUNTED and reported, never silently dropped: a
+    // real lookup storm must stay visible.
+    QHash<QString, int> m_coalescedCount;        // guarded by m_pendingMutex
+    QHash<QString, QDateTime> m_missLogged;      // guarded by m_blockedCacheMutex
+    int m_missLogIntervalSeconds = 60;
+
     QHash<QString, QDateTime> m_blockedCache;
     QHash<QString, QDateTime> m_allowedCache;
     QMutex m_blockedCacheMutex;

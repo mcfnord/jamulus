@@ -122,7 +122,9 @@ void CentralDefense::checkAndLookup(const QHostAddress& addr)
         QMutexLocker l(&m_pendingMutex);
 
         if (m_inflightIp == ipStr) {
-            qCDebug(lcCentralDefense) << "lookup: coalesced (inflight)" << ipStr;
+            // One line per episode, not per packet; onLookupFinished reports the total.
+            if (++m_coalescedCount[ipStr] == 1)
+                qCDebug(lcCentralDefense) << "lookup: coalesced (inflight)" << ipStr;
             return;
         }
         if (m_pendingSet.contains(ipStr)) {
@@ -198,6 +200,15 @@ void CentralDefense::onLookupFinished()
     m_inflightReply = nullptr;
     m_inflightIp.clear();
 
+    // Report what the per-episode suppression above absorbed, so volume is visible as a number.
+    int nCoalesced = 0;
+    {
+        QMutexLocker l(&m_pendingMutex);
+        nCoalesced = m_coalescedCount.take(ip);
+    }
+    if (nCoalesced > 1)
+        qCDebug(lcCentralDefense) << "lookup: coalesced" << nCoalesced << "packets while inflight" << ip;
+
     QHostAddress addr(ip);
 
     if (reply->error() != QNetworkReply::NoError) {
@@ -241,6 +252,7 @@ bool CentralDefense::shouldAllow(const QHostAddress& addr)
 
     QString ipStr = addr.toString();
 
+    bool bLogMiss = false;
     {
         QMutexLocker l(&m_blockedCacheMutex);
         auto it = m_blockedCache.find(ipStr);
@@ -255,11 +267,27 @@ bool CentralDefense::shouldAllow(const QHostAddress& addr)
                 return true;
             m_allowedCache.erase(ait);
         }
+
+        // Rate-limit the cache-miss line to one per IP per m_missLogIntervalSeconds. This reuses
+        // the lock ALREADY held on this path -- convention 8 forbids adding a second acquisition
+        // to the UDP receive path, so the decision is made here rather than at the log site.
+        const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+        auto lit = m_missLogged.find(ipStr);
+        if (lit == m_missLogged.end() || lit.value().secsTo(nowUtc) >= m_missLogIntervalSeconds) {
+            m_missLogged.insert(ipStr, nowUtc);
+            bLogMiss = true;
+        }
+        if (m_missLogged.size() > 512) {   // bounded: this is log state, not a cache
+            for (auto i = m_missLogged.begin(); i != m_missLogged.end(); )
+                i = (i.value().secsTo(nowUtc) >= m_missLogIntervalSeconds) ? m_missLogged.erase(i)
+                                                                           : ++i;
+        }
     }
 
     // Cache miss: fail-open and queue an async lookup so the audio thread is never blocked.
     // The addressBlocked signal will disconnect the client if the lookup returns blocked.
-    qCDebug(lcCentralDefense) << "precheck: cache-miss, fail-open, queuing async" << ipStr;
+    if (bLogMiss)
+        qCDebug(lcCentralDefense) << "precheck: cache-miss, fail-open, queuing async" << ipStr;
     QMetaObject::invokeMethod(this, "checkAndLookup", Qt::QueuedConnection,
         Q_ARG(QHostAddress, addr));
     return true;
