@@ -4,26 +4,23 @@
 Author(s):
 * mcfnord
 * The Jamulus Development Team
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
 -->
 
 # Main Jamulus codebase
 
 Licensed under the AGPL 3.0 or any later version; full text in [../COPYING](../COPYING).
 
-This directory contains the main code of Jamulus.
+## What this code does
+
+Jamulus is a client/server system. Each client encodes the audio from its sound device and sends it
+to the server over UDP. The server decodes every client's stream and builds a separate mix for each
+connected client, using that client's own fader gains, then re-encodes it and sends it back to be
+decoded and played out. At both ends, arriving packets go through a jitter buffer first.
+
+Background: [Performing Band Rehearsals on the Internet with Jamulus](https://jamulus.app/PerformingBandRehearsalsontheInternetWithJamulus.pdf),
+Volker Fischer's case study, based on three years of weekly online rehearsals.
+
+## What this directory contains
 
 Code used by both client and server:
 
@@ -59,17 +56,7 @@ Server only:
 The JSON-RPC API ([rpcserver.cpp](rpcserver.cpp), [clientrpc.cpp](clientrpc.cpp),
 [serverrpc.cpp](serverrpc.cpp)) is documented in [../docs/JSON-RPC.md](../docs/JSON-RPC.md).
 
-## Jamulus Architecture
-
-Jamulus is a client/server system. Each client encodes the audio from its sound device and sends it
-to the server over UDP. The server decodes every client's stream and builds a separate mix for each
-connected client, using that client's own fader gains, then re-encodes it and sends it back to be
-decoded and played out. At both ends, arriving packets go through a jitter buffer first.
-
-Background: [Performing Band Rehearsals on the Internet with Jamulus](https://jamulus.app/PerformingBandRehearsalsontheInternetWithJamulus.pdf),
-Volker Fischer's case study, based on three years of weekly online rehearsals.
-
-### Threading
+## Threading
 
 | thread | exists | started from | what runs on it |
 |---|---|---|---|
@@ -89,7 +76,7 @@ plain `QTimer`, also main thread. With `--multithreading` the heavy blocks go to
 `OnTimer` waits for them. On a machine reporting one core, `CServer`'s constructor turns the
 option back off, so no pool thread is created at all.
 
-#### Locks
+### Locks
 
 The locks taken from more than one thread:
 
