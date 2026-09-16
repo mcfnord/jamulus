@@ -8,27 +8,31 @@ Real-time networked music jamming app. Qt/C++ qmake project. Client and server s
 
 Priority order: Stability > Low latency / real-time safety > Backwards compatibility > Maintainability > New features. This order resolves conflicts only — new features are welcome.
 
+**AI disclosure, the exact form:** `> 🤖 Used AI: <model>, <harness>`, at the end of the comment, issue or Pull Request description it belongs to — never in a code comment. The requirement itself is [Using AI](CONTRIBUTING.md#using-ai).
+
 What is below is orientation only: where things are, and how to build and run them.
 
 ---
 
 ## Build and Test
 
-**Before running a build**, read `COMPILING.md` for your compile target. It includes build commands, platform-specific dependencies and `CONFIG` flags. `.github/autobuild` contains the build scripts for the GitHub Actions workflow. Read these files if you are stuck and need an example.
+**Before running a build**, read `COMPILING.md` for your compile target. It includes build commands, platform-specific dependencies and `CONFIG` flags. `.github/autobuild` contains the build scripts for the GitHub Actions workflow. Read these files if you are stuck and need an example. GitHub Actions builds multiple platforms — on failure read the failing step's log.
 
-**Testing:** run headless server (args `-s -n`), connect a client (e.g. via: `-n -c localhost`; may need jackd running on Linux. Run dummy Jack via: `jackd -d dummy`), exercise the change; use the JSON-RPC API (`docs/JSON-RPC.md`, enabled with `--jsonrpcport` and `--jsonrpcsecretfile`) where possible. Connecting a client needs a build without `serveronly` (`COMPILING.md`, "Compile time arguments"); `serveronly` rejects `-c`. State what you tested in the PR with evidence. GitHub Actions builds multiple platforms — on failure read the failing step's log.
+**Testing:** run headless server (args `-s -n`), connect a client (e.g. via: `-n -c localhost`; may need jackd running on Linux. Run dummy Jack via: `jackd -d dummy`), exercise the change; use the JSON-RPC API (`docs/JSON-RPC.md`, enabled with `--jsonrpcport` and `--jsonrpcsecretfile`) where possible. Connecting a client needs a build without `serveronly` (`COMPILING.md`, "Compile time arguments"); `serveronly` rejects `-c`. State what you tested in the PR with evidence. A build is not a test: [Testing](CONTRIBUTING.md#testing) says what to exercise and what to report.
 
 ## Where the rules are
 
 | Before you… | Read |
 |---|---|
 | start writing anything at all | [the opening bullets](CONTRIBUTING.md#contributing-to-jamulus) |
-| resolve a design tradeoff | [general principles](CONTRIBUTING.md#jamulus-projectsource-code-general-principles) |
 | touch `src/sound`, `src/socket.cpp` or `src/server.cpp` | [Real-time safety](CONTRIBUTING.md#real-time-safety) |
 | parse anything that arrived over the network | [Input arriving over the network](CONTRIBUTING.md#input-arriving-over-the-network) |
+| edit a generated file or `libs/` — don't, by hand | [Files not to edit by hand](CONTRIBUTING.md#files-not-to-edit-by-hand) |
+| edit `ChangeLog` directly — don't; use a `CHANGELOG:` line in the PR | [Documentation/Acknowledgements](CONTRIBUTING.md#documentationacknowledgements) |
+| report a security vulnerability — never as an issue | [`SECURITY.md`](SECURITY.md) |
+| resolve a design tradeoff | [general principles](CONTRIBUTING.md#jamulus-projectsource-code-general-principles) |
 | change an existing protocol message | [Wire compatibility](CONTRIBUTING.md#wire-compatibility) |
 | format code | [Source code consistency](CONTRIBUTING.md#source-code-consistency) |
-| edit a generated file or `libs/` | [Files not to edit by hand](CONTRIBUTING.md#files-not-to-edit-by-hand) |
 | use AI for any part of the work | [Using AI](CONTRIBUTING.md#using-ai) |
 | add a file, or copy code from elsewhere | [Licensing](CONTRIBUTING.md#licensing) |
 | use a Qt or C++ feature that may be too new | [Supported platforms](CONTRIBUTING.md#supported-platforms) |
@@ -36,7 +40,5 @@ What is below is orientation only: where things are, and how to build and run th
 | write user-facing text | [User experience](CONTRIBUTING.md#user-experience) |
 | open a Pull Request | [Submitting code](CONTRIBUTING.md#submitting-code-and-getting-started), [Testing](CONTRIBUTING.md#testing), [Ownership](CONTRIBUTING.md#ownership) |
 | post a comment or a review | [Commenting and reviewing](CONTRIBUTING.md#commenting-and-reviewing), and `docs/agents/COMMENTING.md` |
-| write a `CHANGELOG:` line | [Documentation/Acknowledgements](CONTRIBUTING.md#documentationacknowledgements) |
 | build for any platform | [`COMPILING.md`](COMPILING.md) |
 | change how clients, servers and directories talk to each other | [`docs/JAMULUS_PROTOCOL.md`](docs/JAMULUS_PROTOCOL.md) |
-| report a security vulnerability — never as an issue | [`SECURITY.md`](SECURITY.md) |

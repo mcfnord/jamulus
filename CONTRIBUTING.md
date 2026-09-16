@@ -81,7 +81,7 @@ Our CI runs [shellcheck](https://www.shellcheck.net/) and `shfmt` on `.sh` files
 
 - When you use AI as part of your work, remember that it is a tool that you choose to use and your code will be judged in the same way as any other submission.  However, we encourage you to share your AI experiences, as it is an emerging technology, by highlighting how you used AI and give your own review of its performance.
 
-Please disclose AI-generated text at the end of the comment, issue or Pull Request description that carries it, for example `> 🤖 Used AI: <model>, <harness>`. Do not put such notes in code comments.
+Please disclose AI-generated text at the end of the comment, issue or Pull Request description that carries it. Do not put such notes in code comments. [AGENTS.md](AGENTS.md) carries the exact form.
 
 AI-assisted contributions **must** follow the same standards as every other contribution. The submitter remains the author and is expected to understand and stand behind every submitted line. [AGENTS.md](AGENTS.md) is the entry point into this repository for AI Agents. Low-effort contributions might be closed without comment.
 
