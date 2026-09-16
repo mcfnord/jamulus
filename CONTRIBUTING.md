@@ -73,9 +73,13 @@ Our CI runs [shellcheck](https://www.shellcheck.net/) and `shfmt` on `.sh` files
 #### Files not to edit by hand
 
 - Generated sources - `moc_*.cpp`, `ui_*.h`, `qrc_*.cpp` and `*.qm` - are build products. Change what they are generated from and regenerate.
-- Third-party code under `libs/` keeps its upstream formatting. Do not reformat it, and keep any change to it to the minimum needed.
+- Third-party code under `libs/` - do not reformat it, and see [Third-party Libraries](#third-party-libraries) below before changing it.
 - `docs/JSON-RPC.md` is generated. If you change a JSON-RPC method (for example in `src/clientrpc.cpp` or `src/serverrpc.cpp`), regenerate the document with `tools/generate_json_rpc_docs.py` in the same Pull Request - our CI fails otherwise.
 - The `ChangeLog` file - see [Documentation/Acknowledgements](#documentationacknowledgements) below.
+
+#### Third-party Libraries
+
+Third-party code under `libs/` keeps its upstream formatting. Do not reformat it. Where a change to it is required, this MUST be agreed first and kept to the minimum needed. The change MUST be submitted upstream, after acceptance into Jamulus.
 
 ### Using AI
 
@@ -136,7 +140,7 @@ We're using git to develop Jamulus. To contribute, you should get familiar to gi
 
 Have a look at our [guide for translators](docs/TRANSLATING.md) - especially read the git related part. If you need more in depth information, the [git-scm book](https://git-scm.com/book/en/v2) might also help you getting started. If you have any questions, don't hesitate to ask, as git can be very confusing.
 
-Please fill in the [Pull Request template](.github/pull_request_template.md) - it is the checklist reviewers work from.
+Please fill in the [Pull Request template](.github/pull_request_template.md) without removing any sections - it is the checklist reviewers work from. See also [Documentation/Acknowledgements](#documentationacknowledgements) for the `CHANGELOG:` keyword.
 
 Some build targets (iOS, Windows JACK, Linux armhf/arm64) are skipped by default. If your change touches one of them, add the `AUTOBUILD` tag described under [Dependencies](#dependencies) to the Pull Request description.
 
