@@ -2,13 +2,13 @@
 
 Real-time networked music jamming app. Qt/C++ qmake project. Client and server share one codebase; entry point: `src/main.cpp`. Qt project configuration in `Jamulus.pro`.
 
-**[`CONTRIBUTING.md`](CONTRIBUTING.md) is the source of truth for everything this project requires of a contribution; this file does not restate those requirements, and defers to it if the two ever disagree.** Read it before changing code, and before opening or commenting on an issue, Pull Request or discussion here.
+**[`CONTRIBUTING.md`](CONTRIBUTING.md) is the source of truth for what this project requires of a contribution; where this file and CONTRIBUTING.md disagree, CONTRIBUTING.md wins.** Read it before changing code, and before opening or commenting on an issue, Pull Request or discussion here.
 
 **Make the smallest possible change. One logical change per PR. Never mix refactoring with fixes/features.**
 
 Priority order: Stability > Low latency / real-time safety > Backwards compatibility > Maintainability > New features. This order resolves conflicts only — new features are welcome.
 
-**AI disclosure, the exact form:** `> 🤖 Used AI: <model>, <harness>`, at the end of the comment, issue or Pull Request description it belongs to — never in a code comment. The requirement itself is [Using AI](CONTRIBUTING.md#using-ai).
+**AI disclosure, the example form:** `> 🤖 Used AI: <model>, <harness>`. The requirement itself is [Using AI](CONTRIBUTING.md#using-ai).
 
 What is below is orientation only: where things are, and how to build and run them.
 
@@ -18,7 +18,7 @@ What is below is orientation only: where things are, and how to build and run th
 
 **Before running a build**, read `COMPILING.md` for your compile target. It includes build commands, platform-specific dependencies and `CONFIG` flags. `.github/autobuild` contains the build scripts for the GitHub Actions workflow. Read these files if you are stuck and need an example. GitHub Actions builds multiple platforms — on failure read the failing step's log.
 
-**Testing:** run headless server (args `-s -n`), connect a client (e.g. via: `-n -c localhost`; may need jackd running on Linux. Run dummy Jack via: `jackd -d dummy`), exercise the change; use the JSON-RPC API (`docs/JSON-RPC.md`, enabled with `--jsonrpcport` and `--jsonrpcsecretfile`) where possible. Connecting a client needs a build without `serveronly` (`COMPILING.md`, "Compile time arguments"); `serveronly` rejects `-c`. State what you tested in the PR with evidence. A build is not a test: [Testing](CONTRIBUTING.md#testing) says what to exercise and what to report.
+**Testing:** run headless server (args `-s -n`), connect a client (e.g. via: `-n -c localhost`; may need jackd running on Linux. Run dummy Jack via: `jackd -d dummy`), exercise the change; use the JSON-RPC API (`docs/JSON-RPC.md`, enabled with `--jsonrpcport` and `--jsonrpcsecretfile`) where possible. Connecting a client needs a build without `serveronly` (`COMPILING.md`, "Compile time arguments"); `serveronly` rejects `-c`. A build is not a test: [Testing](CONTRIBUTING.md#testing) says what to exercise and what to report.
 
 ## Where the rules are
 
@@ -27,8 +27,8 @@ What is below is orientation only: where things are, and how to build and run th
 | start writing anything at all | [the opening bullets](CONTRIBUTING.md#contributing-to-jamulus) |
 | touch `src/sound`, `src/socket.cpp` or `src/server.cpp` | [Real-time safety](CONTRIBUTING.md#real-time-safety) |
 | parse anything that arrived over the network | [Input arriving over the network](CONTRIBUTING.md#input-arriving-over-the-network) |
-| edit a generated file or `libs/` — don't, by hand | [Files not to edit by hand](CONTRIBUTING.md#files-not-to-edit-by-hand) |
-| edit `ChangeLog` directly — don't; use a `CHANGELOG:` line in the PR | [Documentation/Acknowledgements](CONTRIBUTING.md#documentationacknowledgements) |
+| edit a generated file, or anything under `libs/` | [Files not to edit by hand](CONTRIBUTING.md#files-not-to-edit-by-hand) |
+| update the `ChangeLog` | [Documentation/Acknowledgements](CONTRIBUTING.md#documentationacknowledgements) |
 | report a security vulnerability — never as an issue | [`SECURITY.md`](SECURITY.md) |
 | resolve a design tradeoff | [general principles](CONTRIBUTING.md#jamulus-projectsource-code-general-principles) |
 | change an existing protocol message | [Wire compatibility](CONTRIBUTING.md#wire-compatibility) |
