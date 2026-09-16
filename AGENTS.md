@@ -38,7 +38,7 @@ What is below is orientation only: where things are, and how to build and run th
 | use a Qt or C++ feature that may be too new | [Supported platforms](CONTRIBUTING.md#supported-platforms) |
 | add a dependency | [Dependencies](CONTRIBUTING.md#dependencies) |
 | write user-facing text | [User experience](CONTRIBUTING.md#user-experience) |
-| open a Pull Request | [Submitting code](CONTRIBUTING.md#submitting-code-and-getting-started), [Testing](CONTRIBUTING.md#testing), [Ownership](CONTRIBUTING.md#ownership) |
-| post a comment or a review | [Commenting and reviewing](CONTRIBUTING.md#commenting-and-reviewing), and `docs/agents/COMMENTING.md` |
+| open a Pull Request | [Submitting code](CONTRIBUTING.md#submitting-code-and-getting-started), [Testing](CONTRIBUTING.md#testing), [Ownership](CONTRIBUTING.md#ownership), and [`docs/agents/COMMENTING.md`](docs/agents/COMMENTING.md) |
+| post a comment or a review | [Commenting and reviewing](CONTRIBUTING.md#commenting-and-reviewing), and [`docs/agents/COMMENTING.md`](docs/agents/COMMENTING.md) |
 | build for any platform | [`COMPILING.md`](COMPILING.md) |
 | change how clients, servers and directories talk to each other | [`docs/JAMULUS_PROTOCOL.md`](docs/JAMULUS_PROTOCOL.md) |

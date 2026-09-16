@@ -27,7 +27,7 @@ Do not introduce code that prevents processing of audio within the _minimum_ cyc
 
 #### Input arriving over the network
 
-Do not trust values sent by remote clients, servers or directories. Validate the size and bounds of everything read from the network before it reaches an array index, a length calculation or an allocation. Malformed input is how a crash gets into a release; see [SECURITY.md](SECURITY.md) for reporting one you find in a released version.
+Do not trust values sent by remote clients, servers or directories. Validate the size and bounds of everything read from the network before it reaches an array index, a length calculation or an allocation. Malformed input is how a crash gets into a release; see [SECURITY.md](SECURITY.md) for how to report one you find.
 
 #### Wire compatibility
 
@@ -159,7 +159,7 @@ Admins reserve the right to do this as they see fit.
 - Test what you can test before you claim it - a build, a log, a run - and cut what you cannot. Words like *presumably*, *should* and *likely* usually mark a sentence that needs a measurement, or needs deleting.
 - Comment when you add evidence or an answer the thread does not have yet, in the shortest form that carries it. Let an exchange between others finish, and re-read the thread just before posting - it may have moved while you were writing.
 - If a comment turns out to be wrong or incomplete, edit it so that the error leaves the page. Further evidence about the same finding belongs in that comment rather than in a new one.
-- Open an issue for a defect you can reproduce, and put the reproduction in the body.
+- Open an issue for a defect you can reproduce, and put the reproduction in the body. Never open one for a security vulnerability — [SECURITY.md](SECURITY.md) says how to report those.
 - If someone states how they want to be engaged on a thread - for example, no AI-written replies - follow it while it stands. Disagreeing is welcome: say so once, with your reason; a preference can rest on a misunderstanding on either side.
 
 ### Documentation/Acknowledgements
