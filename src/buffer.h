@@ -541,6 +541,10 @@ protected:
     // needed even though iSeqLoss is written by the socket thread in Put().
     uint32_t iSeqLossAccounted = 0;
 
+    // Per candidate, blocks it is owed that were never sent. Consumed when that candidate
+    // actually starves, because each depth starves at its own lag after the loss.
+    int viPendingWireLoss[NUM_STAT_SIMULATION_BUFFERS] = { 0 };
+
     CErrorRate ErrorRateStatistic[NUM_STAT_SIMULATION_BUFFERS];
     CNetBuf    SimulationBuffer[NUM_STAT_SIMULATION_BUFFERS];
     int        viBufSizesForSim[NUM_STAT_SIMULATION_BUFFERS];

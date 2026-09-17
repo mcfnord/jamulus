@@ -718,6 +718,11 @@ void CNetBufWithStats::Init ( const int iNewBlockSize, const int iNewNumBlocks, 
         // class resets its own loss counter independently of this one
         iSeqLossAccounted = 0;
 
+        for ( int i = 0; i < NUM_STAT_SIMULATION_BUFFERS; i++ )
+        {
+            viPendingWireLoss[i] = 0;
+        }
+
         // set the auto filter weights and max statistic count
         if ( bUseDoubleSystemFrameSize )
         {
@@ -807,8 +812,13 @@ bool CNetBufWithStats::Get ( CVector<uint8_t>& vecbyData, const int iOutSize )
     // So excuse exactly one statistics update per block the sequence numbers show was never
     // sent. The simulation buffers are still stepped below, so they stay in lockstep with the
     // real one and only the accounting is skipped.
-    bool bExcusedAsWireLoss = false;
-
+    // Book each newly lost block as an outstanding deficit against EVERY candidate. It has to
+    // be per candidate and consumed on the failure itself, not on the Get that happens to
+    // follow the gap: a packet lost at time T does not starve a buffer until the deficit
+    // reaches its read pointer, which is later, and at a DIFFERENT LAG for each depth. An
+    // earlier version excused one Get per loss as soon as the gap was seen; those Gets mostly
+    // SUCCEED, so it dropped good samples from the denominator, left the real failures in the
+    // numerator, and moved the measured rate the wrong way (37,022 vs 35,244 ppm, FU378).
     if ( bUseSequenceNumber )
     {
         const uint32_t iSeqLossNow = iSeqLoss.load ( std::memory_order_relaxed );
@@ -821,20 +831,30 @@ bool CNetBufWithStats::Get ( CVector<uint8_t>& vecbyData, const int iOutSize )
         }
         else if ( iSeqLossNow > iSeqLossAccounted )
         {
-            iSeqLossAccounted++;
-            bExcusedAsWireLoss = true;
+            const int iNewlyLost = static_cast<int> ( iSeqLossNow - iSeqLossAccounted );
+            iSeqLossAccounted    = iSeqLossNow;
+
+            for ( int i = 0; i < NUM_STAT_SIMULATION_BUFFERS; i++ )
+            {
+                viPendingWireLoss[i] += iNewlyLost;
+            }
         }
     }
 
     // update statistics calculations
     for ( int i = 0; i < NUM_STAT_SIMULATION_BUFFERS; i++ )
     {
-        const bool bSimulationGetOK = SimulationBuffer[i].Get ( vecbyData, iOutSize );
+        bool bSimulationError = !SimulationBuffer[i].Get ( vecbyData, iOutSize );
 
-        if ( !bExcusedAsWireLoss )
+        // this candidate starved, and a block it was owed was never sent: depth did not cause
+        // this and no depth could have prevented it, so it is not evidence against this size
+        if ( bSimulationError && ( viPendingWireLoss[i] > 0 ) )
         {
-            ErrorRateStatistic[i].Update ( !bSimulationGetOK );
+            viPendingWireLoss[i]--;
+            bSimulationError = false;
         }
+
+        ErrorRateStatistic[i].Update ( bSimulationError );
     }
 
     // update auto setting
