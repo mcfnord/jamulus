@@ -537,6 +537,10 @@ protected:
 
     // statistic (do not use the vector class since the classes do not have
     // appropriate copy constructor/operator)
+    // Blocks already excused as wire loss in Get(). Only Get() touches it, so no atomic is
+    // needed even though iSeqLoss is written by the socket thread in Put().
+    uint32_t iSeqLossAccounted = 0;
+
     CErrorRate ErrorRateStatistic[NUM_STAT_SIMULATION_BUFFERS];
     CNetBuf    SimulationBuffer[NUM_STAT_SIMULATION_BUFFERS];
     int        viBufSizesForSim[NUM_STAT_SIMULATION_BUFFERS];

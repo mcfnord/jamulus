@@ -714,6 +714,10 @@ void CNetBufWithStats::Init ( const int iNewBlockSize, const int iNewNumBlocks, 
     // inits for statistics calculation
     if ( !bPreserve )
     {
+        // wire-loss blocks already excused in Get(); the clamp there also recovers if the base
+        // class resets its own loss counter independently of this one
+        iSeqLossAccounted = 0;
+
         // set the auto filter weights and max statistic count
         if ( bUseDoubleSystemFrameSize )
         {
@@ -792,10 +796,45 @@ bool CNetBufWithStats::Get ( CVector<uint8_t>& vecbyData, const int iOutSize )
     // call base class Get
     const bool bGetOK = CNetBuf::Get ( vecbyData, iOutSize );
 
+    // A packet lost on the wire is never Put, so it is missing from EVERY simulation buffer and
+    // fails a Get at every candidate depth. Counting that against the candidates measures the
+    // link rather than the buffer: depth cannot manufacture a packet, and the deficit is
+    // permanent rather than something a deeper buffer rides out. Under sustained loss this
+    // pushes every candidate above the error bound, no decision is found, and UpdateAutoSetting
+    // falls through to the largest size - maximum latency bought for a problem that buffering
+    // cannot fix, charged to the connection that is already worst.
+    //
+    // So excuse exactly one statistics update per block the sequence numbers show was never
+    // sent. The simulation buffers are still stepped below, so they stay in lockstep with the
+    // real one and only the accounting is skipped.
+    bool bExcusedAsWireLoss = false;
+
+    if ( bUseSequenceNumber )
+    {
+        const uint32_t iSeqLossNow = iSeqLoss.load ( std::memory_order_relaxed );
+
+        if ( iSeqLossNow < iSeqLossAccounted )
+        {
+            // a reordered packet arrived late and gave its loss back: never excuse more blocks
+            // than the link actually dropped
+            iSeqLossAccounted = iSeqLossNow;
+        }
+        else if ( iSeqLossNow > iSeqLossAccounted )
+        {
+            iSeqLossAccounted++;
+            bExcusedAsWireLoss = true;
+        }
+    }
+
     // update statistics calculations
     for ( int i = 0; i < NUM_STAT_SIMULATION_BUFFERS; i++ )
     {
-        ErrorRateStatistic[i].Update ( !SimulationBuffer[i].Get ( vecbyData, iOutSize ) );
+        const bool bSimulationGetOK = SimulationBuffer[i].Get ( vecbyData, iOutSize );
+
+        if ( !bExcusedAsWireLoss )
+        {
+            ErrorRateStatistic[i].Update ( !bSimulationGetOK );
+        }
     }
 
     // update auto setting
