@@ -63,6 +63,7 @@ jamulus_plugin_import.cpp
 # never published to the public fork. Untracked 2026-08-11; earlier revisions remain in
 # this branch's history and in forks.
 /CLAUDE.md
+/FORK-REFERENCE.md
 /TODO.md
 /deploy.sh
 /deploy-jazz.sh
