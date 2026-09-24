@@ -55,7 +55,7 @@ void ChatReporter::start()
         R"(https://www\.dochord\.com/[^\s]*)",
         R"(https://www\.virtualsheetmusic\.com/[^\s]*)",
         R"(https://(?:[\w-]+\.)?guitarians\.com/[^\s]*)",
-        R"(https://vocal-voyage\.de/[^\s]*)",
+        R"(https://(?:[\w-]+\.)?vocal-voyage\.de/[^\s]*)",
         nullptr
     };
     {
