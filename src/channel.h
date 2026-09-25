@@ -286,6 +286,7 @@ public:
         iCumLevelWindows.store ( 0, std::memory_order_relaxed );
         iPeakLevel.store ( 0, std::memory_order_relaxed );
         iFormatChanges.store ( 0, std::memory_order_relaxed );
+        Protocol.ResetAckRttTelemetry();
         iPrevCodedBytesForTelem = 0;
         iLastArrivalNs          = 0;
         ArrivalTimer.invalidate(); // first gap of the new session must not span the vacancy

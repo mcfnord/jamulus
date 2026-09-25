@@ -225,6 +225,14 @@ public:
     uint32_t GetCumAckRttSumMs() const { return iCumAckRttSumMs.load ( std::memory_order_relaxed ); }
     uint32_t GetCumAckRttN() const { return iCumAckRttN.load ( std::memory_order_relaxed ); }
     uint32_t GetCumAckRttMaxMs() const { return iCumAckRttMaxMs.load ( std::memory_order_relaxed ); }
+    // new occupant of the channel slot (CChannel::ResetTelemetryV2): Reset() keeps these, so
+    // without this ackrtt= ran per slot since boot and spliced every previous player in
+    void ResetAckRttTelemetry()
+    {
+        iCumAckRttSumMs.store ( 0, std::memory_order_relaxed );
+        iCumAckRttN.store ( 0, std::memory_order_relaxed );
+        iCumAckRttMaxMs.store ( 0, std::memory_order_relaxed );
+    }
     void CreateNetwTranspPropsMes ( const CNetworkTransportProps& NetTrProps );
     void CreateReqNetwTranspPropsMes();
     void CreateReqSplitMessSupportMes();

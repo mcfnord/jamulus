@@ -2198,7 +2198,8 @@ void CServer::WriteTelemetryV2()
 
         // ackrtt= : sum_ms/n/max_ms of the ACK round trip of the server's own reliable messages to
         // this channel, first-attempt sends only. A per-client RTT that needs nothing from the
-        // client. Cumulative and monotonic; difference two samples for an interval mean.
+        // client. Cumulative since this occupant connected (zeroed by ResetTelemetryV2; before
+        // 2026-09-25 it ran per slot since boot); difference two samples for an interval mean.
         out << QString ( " ackrtt=%1/%2/%3" )
                    .arg ( vecChannels[iChanID].GetCumAckRttSumMs() )
                    .arg ( vecChannels[iChanID].GetCumAckRttN() )
