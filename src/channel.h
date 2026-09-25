@@ -250,6 +250,10 @@ public:
     }
     // group E: did the client change audio format mid-session?
     uint32_t GetFormatChanges() const { return iFormatChanges.load ( std::memory_order_relaxed ); }
+    // group F: chat messages this occupant has sent (count only, never the text). Bumped on the main
+    // thread by CServer::CreateAndSendChatTextForAllConChannels, the one path every client chat takes.
+    void     NoteChatMessage() { iCumChatMsgs.fetch_add ( 1, std::memory_order_relaxed ); }
+    uint32_t GetCumChatMsgs() const { return iCumChatMsgs.load ( std::memory_order_relaxed ); }
 
     // Session serial for this channel SLOT, bumped by ResetTelemetryV2 on every new occupant.
     // Slot indices are reused, so ch= alone splices players; (ch, sess) segments them exactly,
@@ -286,6 +290,7 @@ public:
         iCumLevelWindows.store ( 0, std::memory_order_relaxed );
         iPeakLevel.store ( 0, std::memory_order_relaxed );
         iFormatChanges.store ( 0, std::memory_order_relaxed );
+        iCumChatMsgs.store ( 0, std::memory_order_relaxed );
         Protocol.ResetAckRttTelemetry();
         iPrevCodedBytesForTelem = 0;
         iLastArrivalNs          = 0;
@@ -413,6 +418,7 @@ protected:
     std::atomic<uint32_t> iCumLevelWindows { 0 };
     std::atomic<uint32_t> iPeakLevel { 0 };
     std::atomic<uint32_t> iFormatChanges { 0 };
+    std::atomic<uint32_t> iCumChatMsgs { 0 };
     std::atomic<uint32_t> iTelemSession { 0 }; // bumped per new occupant; see ResetTelemetryV2
 
     qint64                iLastArrivalNs = 0; // socket thread only

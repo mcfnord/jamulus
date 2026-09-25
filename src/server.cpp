@@ -1703,6 +1703,8 @@ void CServer::BroadcastChatMessage ( const QString& strMsg )
 
 void CServer::CreateAndSendChatTextForAllConChannels ( const int iCurChanID, const QString& strChatText )
 {
+    vecChannels[iCurChanID].NoteChatMessage(); // telemetry v2 chat= (count only)
+
     if ( strChatText.trimmed().startsWith ( QStringLiteral ( "/stream" ) ) )
     {
         if ( m_chatReporter )
@@ -2232,11 +2234,15 @@ void CServer::WriteTelemetryV2()
                    .arg ( vecChannels[iChanID].GetCumConcealLate() )
                    .arg ( vecChannels[iChanID].GetCumConcealEarly() );
 
-        // srv= goes LAST, after every optional group and after cc=, so it is purely additive: a
+        // chat= : chat messages this occupant has sent since connecting (count only, never the text;
+        // zeroed by ResetTelemetryV2). Answers "do silent short visitors chat?" (FU601).
+        out << QString ( " chat=%1" ).arg ( vecChannels[iChanID].GetCumChatMsgs() );
+
+        // srv= goes LAST, after every optional group and after cc= and chat=, so it is purely additive: a
         // parser anchored on the fixed record prefix still matches, and every optional tail
         // (codec=/fsz=/seqcap=, simerr=/bound=/dec=, cc=) is found by search, not by position.
         // Two fields both documented as "last" is exactly how a record format rots, so the
-        // order is fixed here deliberately: srv= terminates the record, cc= precedes it.
+        // order is fixed here deliberately: srv= terminates the record, chat= precedes it.
         out << QString ( " srv=%1" ).arg ( iTelemV2ServerId );
 
         out << "\n";
