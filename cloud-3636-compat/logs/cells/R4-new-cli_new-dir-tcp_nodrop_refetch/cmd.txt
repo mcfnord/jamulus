@@ -1,0 +1,3 @@
+cell=R4-new-cli_new-dir-tcp_nodrop_refetch client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=serverlist target=127.0.0.1:30000 clientport=41300 drop=no
+cmd: /home/user/harness/cldrv-new serverlist 127.0.0.1:30000 41300 9 1500 --refetch
+client real UDP port: 41374

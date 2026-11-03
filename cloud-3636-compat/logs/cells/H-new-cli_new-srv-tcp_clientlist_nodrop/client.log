@@ -1,0 +1,24 @@
+[   0.001] QT: IPv4 socket created
+[   0.001] QT: Connecting to JACK "default" instance (use the JACK_DEFAULT_SERVER environment variable to change this).
+[   0.068] driver started mode=clientlist target=127.0.0.1:35000 clientport=42300 tree=TREE_NEW
+[   0.068] driver pid=7957 waiting 1500 ms before first request
+[   1.645] ACTION CreateCLServerListPingMes
+[   1.645] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   1.646] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=1ms numclients=34
+[   1.646] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=34)
+[   1.646] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=UDP
+[   1.647] EVENT CLM_CONN_CLIENTS_LIST received (CClient signal) from 127.0.0.1:35000 entries=34
+[   1.647] TRANSPORT CLM_CONN_CLIENTS_LIST via UDP entries=34 from 127.0.0.1:35000
+[   1.647] EVENT CLM_TCP_OFFERED received from 127.0.0.1:35000 for msgid=1013 token=0
+[   4.273] ACTION CreateCLServerListPingMes
+[   4.273] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   4.273] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=0ms numclients=34
+[   6.782] ACTION CreateCLServerListPingMes
+[   6.782] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   6.783] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=1ms numclients=34
+[   9.284] ACTION CreateCLServerListPingMes
+[   9.284] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   9.285] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=1ms numclients=34
+[  11.782] END full_server_list=no red_list=no full_count=0 listed_clients=34 last_numclients=34
+[  11.782] ACTION CreateCLServerListPingMes
+[  11.782] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP

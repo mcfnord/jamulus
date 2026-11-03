@@ -1,0 +1,97 @@
+- server mode chosen
+- no GUI mode chosen
+- selected port number: 35000
+- TCP server enabled
+- maximum number of channels: 50
+IPv4 socket created
+Using "192.0.2.2" as external IP.
+Recording state not initialised
+- Jamulus-TCP: IPv4 server started on 0.0.0.0:35000
+ *** Jamulus, Version 3.12.5dev-nogit
+ *** Internet Jam Session Software
+ *** Released under the GNU Affero General Public License 3.0 (or any later version)
+ *** <https://www.gnu.org/licenses/>
+ *** 
+ *** As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ *** under AGPL 3.0 or any later version.
+ *** 
+ *** Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ *** This code will be licensed under GPL 3.0 (or any later version) from
+ *** 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ *** the combined work, including network use provisions.
+ *** 
+ *** This program is free software: you can redistribute it and/or modify
+ *** it under the terms of the GNU Affero General Public License as published by
+ *** the Free Software Foundation, either version 3 of the License, or
+ *** (at your option) any later version.
+ *** 
+ *** This program is distributed in the hope that it will be useful,
+ *** but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *** GNU Affero General Public License for more details.
+ *** 
+ *** You should have received a copy of the GNU Affero General Public License
+ *** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *** 
+ *** ---------------------------------------------------------------------------
+ *** 
+ *** This program is free software: you can redistribute it and/or modify
+ *** it under the terms of the GNU General Public License as published by
+ *** the Free Software Foundation, either version 3 of the License, or
+ *** (at your option) any later version.
+ *** 
+ *** This program is distributed in the hope that it will be useful,
+ *** but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *** GNU General Public License for more details.
+ *** 
+ *** You should have received a copy of the GNU General Public License
+ *** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *** 
+ *** This app uses the following libraries, resources or code snippets:
+ *** 
+ *** Qt cross-platform application framework 5.15.13 (build), 5.15.13 (runtime)
+ *** <https://www.qt.io>
+ *** 
+ *** Opus Interactive Audio Codec
+ *** <https://www.opus-codec.org>
+ *** 
+ *** Copyright © 2005-2026 The Jamulus Development Team
+
+2026-11-03 22:26:47, 127.0.0.1, connected (1)
+2026-11-03 22:26:47, 127.0.0.1, connected (2)
+2026-11-03 22:26:47, 127.0.0.1, connected (3)
+2026-11-03 22:26:47, 127.0.0.1, connected (4)
+2026-11-03 22:26:47, 127.0.0.1, connected (5)
+2026-11-03 22:26:47, 127.0.0.1, connected (6)
+2026-11-03 22:26:47, 127.0.0.1, connected (7)
+2026-11-03 22:26:47, 127.0.0.1, connected (8)
+2026-11-03 22:26:49, 127.0.0.1, connected (9)
+2026-11-03 22:26:49, 127.0.0.1, connected (10)
+2026-11-03 22:26:50, 127.0.0.1, connected (11)
+2026-11-03 22:26:50, 127.0.0.1, connected (12)
+2026-11-03 22:26:50, 127.0.0.1, connected (13)
+2026-11-03 22:26:50, 127.0.0.1, connected (14)
+2026-11-03 22:26:50, 127.0.0.1, connected (15)
+2026-11-03 22:26:50, 127.0.0.1, connected (16)
+2026-11-03 22:26:52, 127.0.0.1, connected (17)
+2026-11-03 22:26:52, 127.0.0.1, connected (18)
+2026-11-03 22:26:52, 127.0.0.1, connected (19)
+2026-11-03 22:26:52, 127.0.0.1, connected (20)
+2026-11-03 22:26:52, 127.0.0.1, connected (21)
+2026-11-03 22:26:52, 127.0.0.1, connected (22)
+2026-11-03 22:26:52, 127.0.0.1, connected (23)
+2026-11-03 22:26:52, 127.0.0.1, connected (24)
+2026-11-03 22:26:54, 127.0.0.1, connected (25)
+2026-11-03 22:26:54, 127.0.0.1, connected (26)
+2026-11-03 22:26:54, 127.0.0.1, connected (27)
+2026-11-03 22:26:54, 127.0.0.1, connected (28)
+2026-11-03 22:26:54, 127.0.0.1, connected (29)
+2026-11-03 22:26:54, 127.0.0.1, connected (30)
+2026-11-03 22:26:54, 127.0.0.1, connected (31)
+2026-11-03 22:26:54, 127.0.0.1, connected (32)
+2026-11-03 22:26:56, 127.0.0.1, connected (33)
+2026-11-03 22:26:56, 127.0.0.1, connected (34)
+OnHandledSignal: 15
+2026-11-03 22:29:58,, server idling -------------------------------------
+- stopping Jamulus-TCP IPv4 server

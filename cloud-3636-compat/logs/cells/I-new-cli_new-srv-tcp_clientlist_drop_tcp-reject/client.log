@@ -1,0 +1,45 @@
+[   0.000] QT: IPv4 socket created
+[   0.001] QT: Connecting to JACK "default" instance (use the JACK_DEFAULT_SERVER environment variable to change this).
+[   0.049] driver started mode=clientlist target=127.0.0.1:35000 clientport=42500 tree=TREE_NEW
+[   0.049] driver pid=8078 waiting 1500 ms before first request
+[   1.474] ACTION CreateCLServerListPingMes
+[   1.474] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   1.475] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=1ms numclients=33
+[   1.475] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[   1.475] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=UDP
+[   1.476] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=TCP_ONCE
+[   1.476] EVENT CLM_TCP_OFFERED received from 127.0.0.1:35000 for msgid=1013 token=0
+[   1.477] QT: - TCP connection error: "Connection refused"
+[   3.909] ACTION CreateCLServerListPingMes
+[   3.910] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   3.910] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=1ms numclients=33
+[   3.910] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[   3.910] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=UDP
+[   3.911] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=TCP_ONCE
+[   3.911] EVENT CLM_TCP_OFFERED received from 127.0.0.1:35000 for msgid=1013 token=0
+[   3.911] QT: - TCP connection error: "Connection refused"
+[   6.409] ACTION CreateCLServerListPingMes
+[   6.409] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   6.409] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=0ms numclients=33
+[   6.409] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[   6.409] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=UDP
+[   6.411] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=TCP_ONCE
+[   6.411] EVENT CLM_TCP_OFFERED received from 127.0.0.1:35000 for msgid=1013 token=0
+[   6.411] QT: - TCP connection error: "Connection refused"
+[   8.909] ACTION CreateCLServerListPingMes
+[   8.909] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   8.910] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=1ms numclients=33
+[   8.910] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[   8.910] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=UDP
+[   8.911] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=TCP_ONCE
+[   8.911] EVENT CLM_TCP_OFFERED received from 127.0.0.1:35000 for msgid=1013 token=0
+[   8.911] QT: - TCP connection error: "Connection refused"
+[  11.406] ACTION CreateCLServerListPingMes
+[  11.407] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[  11.408] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=1ms numclients=33
+[  11.408] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[  11.408] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=UDP
+[  11.409] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=TCP_ONCE
+[  11.409] EVENT CLM_TCP_OFFERED received from 127.0.0.1:35000 for msgid=1013 token=0
+[  11.409] QT: - TCP connection error: "Connection refused"
+[  11.907] END full_server_list=no red_list=no full_count=0 listed_clients=-1 last_numclients=33

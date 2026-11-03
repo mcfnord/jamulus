@@ -1,0 +1,6 @@
+cell=I2-strace-new-cli_new-srv-tcp_clientlist_drop_tcp-reject client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=clientlist target=127.0.0.1:35000 clientport=42700 drop=yes
+cmd: strace -f -tt -e trace=connect -o /home/user/harness/logs/cells/I2-strace-new-cli_new-srv-tcp_clientlist_drop_tcp-reject/strace.txt /home/user/harness/cldrv-new clientlist 127.0.0.1:35000 42700 7 1500 
+client real UDP port: 42758
+rule: iptables -I INPUT -i lo -p udp --dport 42758 -m length --length 1501:65535 -j DROP
+    3  5259 DROP       17   --  lo     *       0.0.0.0/0            0.0.0.0/0            udp dpt:42758 length 1501:65535
+    6   360 REJECT     6    --  lo     *       0.0.0.0/0            0.0.0.0/0            tcp dpt:35000 flags:0x17/0x02 reject-with tcp-reset

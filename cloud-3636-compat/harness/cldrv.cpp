@@ -48,6 +48,9 @@ int main ( int argc, char** argv )
     quint16      cliport = QString ( argv[3] ).toUShort();
     int          tmo     = QString ( argv[4] ).toInt();
     int          delay   = argc > 5 ? QString ( argv[5] ).toInt() : 0;
+    // --refetch (serverlist only): issue a second CreateCLReqServerListMes 3 s after the first one,
+    // without calling InitPendingLists in between (what the dialog does on a later re-request of the same directory)
+    bool         refetch = argc > 6 && QString ( argv[6] ) == "--refetch";
     CHostAddress target ( QHostAddress ( hp[0] ), hp[1].toUShort() );
     g_clock.start();
     qInstallMessageHandler ( qtHandler );
@@ -118,6 +121,13 @@ int main ( int argc, char** argv )
             }
         } );
         tReq.start ( SERV_LIST_REQ_UPDATE_TIME_MS );
+        if ( refetch )
+        {
+            QTimer::singleShot ( 3000, [&]() {
+                logf ( "REFETCH 3 s after first request: ACTION CreateCLReqServerListMes (no InitPendingLists)" );
+                cl.CreateCLReqServerListMes ( target );
+            } );
+        }
     }
     else
     {

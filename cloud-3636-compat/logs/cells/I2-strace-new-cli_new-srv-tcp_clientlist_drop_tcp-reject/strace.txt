@@ -1,0 +1,21 @@
+8263  22:29:37.980443 connect(11, {sa_family=AF_UNIX, sun_path="/dev/shm/jack_default_0_0"}, 110) = 0
+8263  22:29:37.983425 connect(11, {sa_family=AF_UNIX, sun_path="/dev/shm/jack_default_0_0"}, 110) = 0
+8263  22:29:39.664265 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+8263  22:29:39.665117 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 ECONNREFUSED (Connection refused)
+8263  22:29:39.665874 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+8263  22:29:39.666250 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 ECONNREFUSED (Connection refused)
+8263  22:29:42.163884 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+8263  22:29:42.164475 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 ECONNREFUSED (Connection refused)
+8263  22:29:42.164807 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+8263  22:29:42.165051 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 ECONNREFUSED (Connection refused)
+8263  22:29:44.665686 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+8263  22:29:44.666572 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 ECONNREFUSED (Connection refused)
+8263  22:29:44.667968 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 EINPROGRESS (Operation now in progress)
+8263  22:29:44.668349 connect(50, {sa_family=AF_INET, sin_port=htons(35000), sin_addr=inet_addr("127.0.0.1")}, 16) = -1 ECONNREFUSED (Connection refused)
+8266  22:29:45.168999 --- SIGRTMIN {si_signo=SIGRTMIN, si_code=SI_TKILL, si_pid=8263, si_uid=0} ---
+8266  22:29:45.169749 +++ exited with 0 +++
+8265  22:29:45.193877 --- SIGRTMIN {si_signo=SIGRTMIN, si_code=SI_TKILL, si_pid=8263, si_uid=0} ---
+8265  22:29:45.194269 +++ exited with 0 +++
+8264  22:29:45.200691 +++ exited with 0 +++
+8267  22:29:45.268591 +++ exited with 0 +++
+8263  22:29:45.270418 +++ exited with 0 +++

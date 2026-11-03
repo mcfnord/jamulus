@@ -1,0 +1,6 @@
+cell=H-new-cli_new-srv-tcp_clientlist_drop_disconnect client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=clientlist target=127.0.0.1:35000 clientport=42400 drop=yes
+cmd: /home/user/harness/cldrv-new clientlist 127.0.0.1:35000 42400 12 1500 
+client real UDP port: 42496
+rule: iptables -I INPUT -i lo -p udp --dport 42496 -m length --length 1501:65535 -j DROP
+during: sleep 4.5; date -u +%T.%N; echo kill client34 pid 7817; kill 7817
+    1  1805 DROP       17   --  lo     *       0.0.0.0/0            0.0.0.0/0            udp dpt:42496 length 1501:65535

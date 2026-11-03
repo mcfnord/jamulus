@@ -1,0 +1,3 @@
+cell=F-step3a-new-cli_new-dir-tcp-publicsrv_nodrop client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=serverlist target=127.0.0.1:33000 clientport=41700 drop=no
+cmd: /home/user/harness/cldrv-new serverlist 127.0.0.1:33000 41700 9 1500 
+client real UDP port: 41713

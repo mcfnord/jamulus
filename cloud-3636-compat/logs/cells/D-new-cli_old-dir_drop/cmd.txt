@@ -1,0 +1,5 @@
+cell=D-new-cli_old-dir_drop client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=serverlist target=127.0.0.1:31000 clientport=41500 drop=yes
+cmd: /home/user/harness/cldrv-new serverlist 127.0.0.1:31000 41500 9 1500 
+client real UDP port: 41579
+rule: iptables -I INPUT -i lo -p udp --dport 41579 -m length --length 1501:65535 -j DROP
+    4 10944 DROP       17   --  lo     *       0.0.0.0/0            0.0.0.0/0            udp dpt:41579 length 1501:65535

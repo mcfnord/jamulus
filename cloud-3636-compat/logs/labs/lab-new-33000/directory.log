@@ -1,0 +1,118 @@
+- server mode chosen
+- no GUI mode chosen
+- selected port number: 33000
+- register with directory at address: localhost
+- TCP server enabled
+- server info: LocalDirectory33000;Directory City;0
+- maximum number of channels: 10
+IPv4 socket created
+Using "192.0.2.2" as external IP.
+Using server info: name = "LocalDirectory33000", city = "Directory City", country/region = "0" (Default)
+Recording state not initialised
+- Jamulus-TCP: IPv4 server started on 0.0.0.0:33000
+ *** Jamulus, Version 3.12.5dev-nogit
+ *** Internet Jam Session Software
+ *** Released under the GNU Affero General Public License 3.0 (or any later version)
+ *** <https://www.gnu.org/licenses/>
+ *** 
+ *** As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ *** under AGPL 3.0 or any later version.
+ *** 
+ *** Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ *** This code will be licensed under GPL 3.0 (or any later version) from
+ *** 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ *** the combined work, including network use provisions.
+ *** 
+ *** This program is free software: you can redistribute it and/or modify
+ *** it under the terms of the GNU Affero General Public License as published by
+ *** the Free Software Foundation, either version 3 of the License, or
+ *** (at your option) any later version.
+ *** 
+ *** This program is distributed in the hope that it will be useful,
+ *** but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *** GNU Affero General Public License for more details.
+ *** 
+ *** You should have received a copy of the GNU Affero General Public License
+ *** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *** 
+ *** ---------------------------------------------------------------------------
+ *** 
+ *** This program is free software: you can redistribute it and/or modify
+ *** it under the terms of the GNU General Public License as published by
+ *** the Free Software Foundation, either version 3 of the License, or
+ *** (at your option) any later version.
+ *** 
+ *** This program is distributed in the hope that it will be useful,
+ *** but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *** GNU General Public License for more details.
+ *** 
+ *** You should have received a copy of the GNU General Public License
+ *** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *** 
+ *** This app uses the following libraries, resources or code snippets:
+ *** 
+ *** Qt cross-platform application framework 5.15.13 (build), 5.15.13 (runtime)
+ *** <https://www.qt.io>
+ *** 
+ *** Opus Interactive Audio Codec
+ *** <https://www.opus-codec.org>
+ *** 
+ *** Copyright © 2005-2026 The Jamulus Development Team
+
+Now a directory
+Server Registration Status update: Registered
+Requested to register entry for 198.51.100.10:33002 (192.0.2.2:33002): Srv02-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33001 (192.0.2.2:33001): Srv01-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33005 (192.0.2.2:33005): Srv05-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33004 (192.0.2.2:33004): Srv04-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33008 (192.0.2.2:33008): Srv08-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33009 (192.0.2.2:33009): Srv09-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33010 (192.0.2.2:33010): Srv10-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33003 (192.0.2.2:33003): Srv03-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33013 (192.0.2.2:33013): Srv13-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33017 (192.0.2.2:33017): Srv17-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33007 (192.0.2.2:33007): Srv07-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33006 (192.0.2.2:33006): Srv06-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33021 (192.0.2.2:33021): Srv21-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33028 (192.0.2.2:33028): Srv28-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33022 (192.0.2.2:33022): Srv22-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33015 (192.0.2.2:33015): Srv15-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33014 (192.0.2.2:33014): Srv14-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33011 (192.0.2.2:33011): Srv11-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33012 (192.0.2.2:33012): Srv12-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33018 (192.0.2.2:33018): Srv18-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33046 (192.0.2.2:33046): Srv46-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33016 (192.0.2.2:33016): Srv16-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33020 (192.0.2.2:33020): Srv20-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33049 (192.0.2.2:33049): Srv49-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33048 (192.0.2.2:33048): Srv48-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33019 (192.0.2.2:33019): Srv19-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33032 (192.0.2.2:33032): Srv32-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33023 (192.0.2.2:33023): Srv23-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33043 (192.0.2.2:33043): Srv43-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33026 (192.0.2.2:33026): Srv26-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33040 (192.0.2.2:33040): Srv40-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33025 (192.0.2.2:33025): Srv25-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33027 (192.0.2.2:33027): Srv27-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33034 (192.0.2.2:33034): Srv34-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33030 (192.0.2.2:33030): Srv30-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33031 (192.0.2.2:33031): Srv31-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33033 (192.0.2.2:33033): Srv33-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33042 (192.0.2.2:33042): Srv42-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33035 (192.0.2.2:33035): Srv35-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33024 (192.0.2.2:33024): Srv24-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33044 (192.0.2.2:33044): Srv44-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33036 (192.0.2.2:33036): Srv36-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33041 (192.0.2.2:33041): Srv41-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33047 (192.0.2.2:33047): Srv47-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33029 (192.0.2.2:33029): Srv29-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33038 (192.0.2.2:33038): Srv38-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33039 (192.0.2.2:33039): Srv39-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33045 (192.0.2.2:33045): Srv45-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33037 (192.0.2.2:33037): Srv37-LongServerNm (external)
+Requested to register entry for 198.51.100.10:33050 (192.0.2.2:33050): Srv50-LongServerNm (external)
+OnHandledSignal: 15
+Server Registration Status update: Not registered
+- stopping Jamulus-TCP IPv4 server

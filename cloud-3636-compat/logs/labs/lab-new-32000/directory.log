@@ -1,0 +1,157 @@
+- server mode chosen
+- no GUI mode chosen
+- selected port number: 32000
+- register with directory at address: localhost
+- server info: LocalDirectory32000;Directory City;0
+- maximum number of channels: 10
+IPv4 socket created
+Using "192.0.2.2" as external IP.
+Using server info: name = "LocalDirectory32000", city = "Directory City", country/region = "0" (Default)
+Recording state not initialised
+ *** Jamulus, Version 3.12.5dev-nogit
+ *** Internet Jam Session Software
+ *** Released under the GNU Affero General Public License 3.0 (or any later version)
+ *** <https://www.gnu.org/licenses/>
+ *** 
+ *** As of Jamulus 3.12.1dev (commit eb172d47): All new source code contributions must be licensed
+ *** under AGPL 3.0 or any later version.
+ *** 
+ *** Existing code: Code contributed before 3.12.1dev (commit eb172d47) was licensed under GPL 2.0+.
+ *** This code will be licensed under GPL 3.0 (or any later version) from
+ *** 3.12.1dev (commit eb172d47).  When distributed as part of Jamulus, the AGPL 3.0 terms govern
+ *** the combined work, including network use provisions.
+ *** 
+ *** This program is free software: you can redistribute it and/or modify
+ *** it under the terms of the GNU Affero General Public License as published by
+ *** the Free Software Foundation, either version 3 of the License, or
+ *** (at your option) any later version.
+ *** 
+ *** This program is distributed in the hope that it will be useful,
+ *** but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *** GNU Affero General Public License for more details.
+ *** 
+ *** You should have received a copy of the GNU Affero General Public License
+ *** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *** 
+ *** ---------------------------------------------------------------------------
+ *** 
+ *** This program is free software: you can redistribute it and/or modify
+ *** it under the terms of the GNU General Public License as published by
+ *** the Free Software Foundation, either version 3 of the License, or
+ *** (at your option) any later version.
+ *** 
+ *** This program is distributed in the hope that it will be useful,
+ *** but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *** GNU General Public License for more details.
+ *** 
+ *** You should have received a copy of the GNU General Public License
+ *** along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *** 
+ *** This app uses the following libraries, resources or code snippets:
+ *** 
+ *** Qt cross-platform application framework 5.15.13 (build), 5.15.13 (runtime)
+ *** <https://www.qt.io>
+ *** 
+ *** Opus Interactive Audio Codec
+ *** <https://www.opus-codec.org>
+ *** 
+ *** Copyright © 2005-2026 The Jamulus Development Team
+
+Now a directory
+Server Registration Status update: Registered
+Requested to register entry for 127.0.0.1:32001 (192.0.2.2:32001): Srv01-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32002 (192.0.2.2:32002): Srv02-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32019 (192.0.2.2:32019): Srv19-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32004 (192.0.2.2:32004): Srv04-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32005 (192.0.2.2:32005): Srv05-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32020 (192.0.2.2:32020): Srv20-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32009 (192.0.2.2:32009): Srv09-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32008 (192.0.2.2:32008): Srv08-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32007 (192.0.2.2:32007): Srv07-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32011 (192.0.2.2:32011): Srv11-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32015 (192.0.2.2:32015): Srv15-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32003 (192.0.2.2:32003): Srv03-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32014 (192.0.2.2:32014): Srv14-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32006 (192.0.2.2:32006): Srv06-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32013 (192.0.2.2:32013): Srv13-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32018 (192.0.2.2:32018): Srv18-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32017 (192.0.2.2:32017): Srv17-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32010 (192.0.2.2:32010): Srv10-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32012 (192.0.2.2:32012): Srv12-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32024 (192.0.2.2:32024): Srv24-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32025 (192.0.2.2:32025): Srv25-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32016 (192.0.2.2:32016): Srv16-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32026 (192.0.2.2:32026): Srv26-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32037 (192.0.2.2:32037): Srv37-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32036 (192.0.2.2:32036): Srv36-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32030 (192.0.2.2:32030): Srv30-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32021 (192.0.2.2:32021): Srv21-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32040 (192.0.2.2:32040): Srv40-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32039 (192.0.2.2:32039): Srv39-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32046 (192.0.2.2:32046): Srv46-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32034 (192.0.2.2:32034): Srv34-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32032 (192.0.2.2:32032): Srv32-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32031 (192.0.2.2:32031): Srv31-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32028 (192.0.2.2:32028): Srv28-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32035 (192.0.2.2:32035): Srv35-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32033 (192.0.2.2:32033): Srv33-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32042 (192.0.2.2:32042): Srv42-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32023 (192.0.2.2:32023): Srv23-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32022 (192.0.2.2:32022): Srv22-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32029 (192.0.2.2:32029): Srv29-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32045 (192.0.2.2:32045): Srv45-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32027 (192.0.2.2:32027): Srv27-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32038 (192.0.2.2:32038): Srv38-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32041 (192.0.2.2:32041): Srv41-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32044 (192.0.2.2:32044): Srv44-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32049 (192.0.2.2:32049): Srv49-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32043 (192.0.2.2:32043): Srv43-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32047 (192.0.2.2:32047): Srv47-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32048 (192.0.2.2:32048): Srv48-LongServerNm (local)
+Requested to register entry for 127.0.0.1:32050 (192.0.2.2:32050): Srv50-LongServerNm (local)
+Requested to unregister entry for 127.0.0.1:32009
+Requested to unregister entry for 127.0.0.1:32004
+Requested to unregister entry for 127.0.0.1:32003
+Requested to unregister entry for 127.0.0.1:32008
+Requested to unregister entry for 127.0.0.1:32010
+Requested to unregister entry for 127.0.0.1:32013
+Requested to unregister entry for 127.0.0.1:32020
+Requested to unregister entry for 127.0.0.1:32039
+Requested to unregister entry for 127.0.0.1:32027
+Requested to unregister entry for 127.0.0.1:32012
+Requested to unregister entry for 127.0.0.1:32029
+Requested to unregister entry for 127.0.0.1:32019
+Requested to unregister entry for 127.0.0.1:32036
+Requested to unregister entry for 127.0.0.1:32016
+Requested to unregister entry for 127.0.0.1:32026
+Requested to unregister entry for 127.0.0.1:32040
+Requested to unregister entry for 127.0.0.1:32035
+Requested to unregister entry for 127.0.0.1:32021
+Requested to unregister entry for 127.0.0.1:32028
+Requested to unregister entry for 127.0.0.1:32032
+Requested to unregister entry for 127.0.0.1:32022
+Requested to unregister entry for 127.0.0.1:32046
+Requested to unregister entry for 127.0.0.1:32017
+Requested to unregister entry for 127.0.0.1:32042
+Requested to unregister entry for 127.0.0.1:32023
+Requested to unregister entry for 127.0.0.1:32048
+Requested to unregister entry for 127.0.0.1:32031
+Requested to unregister entry for 127.0.0.1:32045
+Requested to unregister entry for 127.0.0.1:32037
+Requested to unregister entry for 127.0.0.1:32006
+Requested to unregister entry for 127.0.0.1:32024
+Requested to unregister entry for 127.0.0.1:32047
+Requested to unregister entry for 127.0.0.1:32030
+Requested to unregister entry for 127.0.0.1:32038
+Requested to unregister entry for 127.0.0.1:32011
+Requested to unregister entry for 127.0.0.1:32044
+Requested to unregister entry for 127.0.0.1:32018
+Requested to unregister entry for 127.0.0.1:32050
+Requested to unregister entry for 127.0.0.1:32001
+Requested to unregister entry for 127.0.0.1:32025
+Requested to unregister entry for 127.0.0.1:32005
+Requested to unregister entry for 127.0.0.1:32049
+OnHandledSignal: 15
+Server Registration Status update: Not registered

@@ -1,0 +1,5 @@
+cell=G-old-cli_old-srv_clientlist_drop client=old (4c0dbf23a1ccd0a3624906064a2e03292ba77494) mode=clientlist target=127.0.0.1:34000 clientport=42000 drop=yes
+cmd: /home/user/harness/cldrv-old clientlist 127.0.0.1:34000 42000 12 1500 
+client real UDP port: 42096
+rule: iptables -I INPUT -i lo -p udp --dport 42096 -m length --length 1501:65535 -j DROP
+    4  7220 DROP       17   --  lo     *       0.0.0.0/0            0.0.0.0/0            udp dpt:42096 length 1501:65535

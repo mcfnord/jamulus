@@ -1,0 +1,1 @@
+tcpdump filter: (udp and portrange 42400-42499) or (tcp port 35000)

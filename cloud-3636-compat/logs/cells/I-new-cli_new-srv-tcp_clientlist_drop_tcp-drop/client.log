@@ -1,0 +1,31 @@
+[   0.001] QT: IPv4 socket created
+[   0.001] QT: Connecting to JACK "default" instance (use the JACK_DEFAULT_SERVER environment variable to change this).
+[   0.048] driver started mode=clientlist target=127.0.0.1:35000 clientport=42600 tree=TREE_NEW
+[   0.048] driver pid=8137 waiting 1500 ms before first request
+[   1.624] ACTION CreateCLServerListPingMes
+[   1.625] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   1.627] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=2ms numclients=33
+[   1.627] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[   1.627] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=UDP
+[   1.629] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=TCP_ONCE
+[   1.629] EVENT CLM_TCP_OFFERED received from 127.0.0.1:35000 for msgid=1013 token=0
+[   4.251] ACTION CreateCLServerListPingMes
+[   4.252] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   4.252] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=0ms numclients=33
+[   4.252] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[   4.757] QT: - Jamulus-TCP: timeout connecting to "127.0.0.1:35000"
+[   6.758] ACTION CreateCLServerListPingMes
+[   6.758] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   6.759] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=1ms numclients=33
+[   6.759] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[   6.759] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=UDP
+[   6.760] SEND msgid=1014 bytes=9 to 127.0.0.1:35000 mode=TCP_ONCE
+[   6.760] EVENT CLM_TCP_OFFERED received from 127.0.0.1:35000 for msgid=1013 token=0
+[   9.259] ACTION CreateCLServerListPingMes
+[   9.259] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP
+[   9.260] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:35000 ping=2ms numclients=33
+[   9.260] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=33)
+[   9.757] QT: - Jamulus-TCP: timeout connecting to "127.0.0.1:35000"
+[  11.758] END full_server_list=no red_list=no full_count=0 listed_clients=-1 last_numclients=33
+[  11.758] ACTION CreateCLServerListPingMes
+[  11.758] SEND msgid=1002 bytes=14 to 127.0.0.1:35000 mode=UDP

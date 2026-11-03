@@ -1,0 +1,3 @@
+cell=J-new-cli_new-srv-notcp_clientlist_nodrop client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=clientlist target=127.0.0.1:36000 clientport=42800 drop=no
+cmd: /home/user/harness/cldrv-new clientlist 127.0.0.1:36000 42800 12 1500 
+client real UDP port: 42883

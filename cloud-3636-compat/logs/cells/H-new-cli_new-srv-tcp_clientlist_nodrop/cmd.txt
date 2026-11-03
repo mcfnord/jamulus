@@ -1,0 +1,3 @@
+cell=H-new-cli_new-srv-tcp_clientlist_nodrop client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=clientlist target=127.0.0.1:35000 clientport=42300 drop=no
+cmd: /home/user/harness/cldrv-new clientlist 127.0.0.1:35000 42300 12 1500 
+client real UDP port: 42341

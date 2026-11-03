@@ -1,0 +1,3 @@
+cell=D-new-cli_old-dir_nodrop client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=serverlist target=127.0.0.1:31000 clientport=41500 drop=no
+cmd: /home/user/harness/cldrv-new serverlist 127.0.0.1:31000 41500 9 1500 
+client real UDP port: 41597
