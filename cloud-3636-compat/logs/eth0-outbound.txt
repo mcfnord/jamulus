@@ -1,0 +1,8 @@
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+22:11:40.867370 IP 192.0.2.2.60372 > 8.8.8.8.53: 47649+ A? http-intake.logs.us5.datadoghq.com. (52)
+22:11:40.869066 IP 8.8.8.8.53 > 192.0.2.2.60372: 47649 1/0/0 A 34.149.66.165 (68)
+
+2 packets captured
+2 packets received by filter
+0 packets dropped by kernel

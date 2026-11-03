@@ -1,0 +1,19 @@
+[   0.000] QT: IPv4 socket created
+[   0.001] QT: Connecting to JACK "default" instance (use the JACK_DEFAULT_SERVER environment variable to change this).
+[   0.039] driver started mode=serverlist target=127.0.0.1:30000 clientport=41000 tree=TREE_NEW
+[   0.039] driver pid=4705 waiting 1500 ms before first request
+[   1.615] ACTION CreateCLReqServerListMes (initial)
+[   1.615] SEND msgid=1007 bytes=9 to 127.0.0.1:30000 mode=UDP
+[   1.616] EVENT CLM_RED_SERVER_LIST received from 127.0.0.1:30000 entries=51
+[   1.616] SEND msgid=1007 bytes=9 to 127.0.0.1:30000 mode=TCP_ONCE
+[   1.616] EVENT CLM_TCP_OFFERED received from 127.0.0.1:30000 for msgid=1006 token=0
+[   3.718] TIMER 2s re-request fires: ACTION CreateCLReqServerListMes
+[   4.767] QT: - Jamulus-TCP: timeout connecting to "127.0.0.1:30000"
+[   5.780] TIMER 2s re-request fires: ACTION CreateCLReqServerListMes
+[   5.780] SEND msgid=1007 bytes=9 to 127.0.0.1:30000 mode=UDP
+[   5.781] EVENT CLM_RED_SERVER_LIST received from 127.0.0.1:30000 entries=51
+[   5.781] SEND msgid=1007 bytes=9 to 127.0.0.1:30000 mode=TCP_ONCE
+[   5.781] EVENT CLM_TCP_OFFERED received from 127.0.0.1:30000 for msgid=1006 token=0
+[   7.780] TIMER 2s re-request fires: ACTION CreateCLReqServerListMes
+[   8.780] END full_server_list=no red_list=yes full_count=0 listed_clients=-1 last_numclients=-1
+[   8.780] QT: - Jamulus-TCP: timeout connecting to "127.0.0.1:30000"

@@ -1,0 +1,16 @@
+[   0.001] QT: IPv4 socket created
+[   0.001] QT: Connecting to JACK "default" instance (use the JACK_DEFAULT_SERVER environment variable to change this).
+[   0.027] driver started mode=clientlist target=127.0.0.1:30001 clientport=41000 tree=TREE_NEW
+[   0.027] driver pid=4901 waiting 1500 ms before first request
+[   1.454] ACTION CreateCLServerListPingMes
+[   1.454] SEND msgid=1002 bytes=14 to 127.0.0.1:30001 mode=UDP
+[   1.455] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:30001 ping=1ms numclients=3
+[   1.455] ACTION CreateCLServerListReqConnClientsListMes (listed=-1, reported=3)
+[   1.455] SEND msgid=1014 bytes=9 to 127.0.0.1:30001 mode=UDP
+[   1.455] EVENT CLM_CONN_CLIENTS_LIST received (CClient signal) from 127.0.0.1:30001 entries=3
+[   1.455] TRANSPORT CLM_CONN_CLIENTS_LIST via UDP entries=3 from 127.0.0.1:30001
+[   1.455] EVENT CLM_TCP_OFFERED received from 127.0.0.1:30001 for msgid=1013 token=0
+[   3.837] ACTION CreateCLServerListPingMes
+[   3.837] SEND msgid=1002 bytes=14 to 127.0.0.1:30001 mode=UDP
+[   3.837] EVENT CLM_PING_MS_WITHNUMCLIENTS reply from 127.0.0.1:30001 ping=0ms numclients=3
+[   6.330] END full_server_list=no red_list=no full_count=0 listed_clients=3 last_numclients=3

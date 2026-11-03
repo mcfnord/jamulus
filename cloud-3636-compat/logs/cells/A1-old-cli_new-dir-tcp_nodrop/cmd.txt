@@ -1,0 +1,3 @@
+cell=A1-old-cli_new-dir-tcp_nodrop client=old (4c0dbf23a1ccd0a3624906064a2e03292ba77494) mode=serverlist target=127.0.0.1:30000 clientport=41000 drop=no
+cmd: /home/user/harness/cldrv-old serverlist 127.0.0.1:30000 41000 9
+client real UDP port: 41018

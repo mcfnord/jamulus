@@ -1,0 +1,6 @@
+cell=B1-new-cli_new-dir-tcp_drop_tcp-reject client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=serverlist target=127.0.0.1:30000 clientport=41000 drop=yes
+cmd: /home/user/harness/cldrv-new serverlist 127.0.0.1:30000 41000 9
+client real UDP port: 41062
+rule: iptables -I INPUT -i lo -p udp --dport 41062 -m length --length 1501:65535 -j DROP
+    4 10944 DROP       17   --  lo     *       0.0.0.0/0            0.0.0.0/0            udp dpt:41062 length 1501:65535
+    8   480 REJECT     6    --  lo     *       0.0.0.0/0            0.0.0.0/0            tcp dpt:30000 flags:0x17/0x02 reject-with tcp-reset

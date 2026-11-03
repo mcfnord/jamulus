@@ -1,0 +1,5 @@
+cell=smoke2-new-tcp-drop client=new (99c66a4607a8136adfa7ae5fe2bdc0d64ce330e7) mode=serverlist target=127.0.0.1:30000 clientport=41000 drop=yes
+cmd: /home/user/harness/cldrv-new serverlist 127.0.0.1:30000 41000 9
+client real UDP port: 41057
+rule: iptables -I INPUT -i lo -p udp --dport 41057 -m length --length 1501:65535 -j DROP
+    1  2736 DROP       17   --  lo     *       0.0.0.0/0            0.0.0.0/0            udp dpt:41057 length 1501:65535
