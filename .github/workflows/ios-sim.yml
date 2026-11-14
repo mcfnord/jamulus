@@ -1,0 +1,135 @@
+# iOS Simulator launch rig (fork-only, never for upstream).
+# Builds Jamulus for the arm64 iOS Simulator with ann0see's #340 tooling (pinned) and records,
+# per Jamulus tree: does the app stay up 20 s after launch, a screenshot, crash reports, app log.
+# Arms: upstream main (expect the iOS 26 SDK "UIScene life cycle is required" abort per #3988),
+# #3988 head (expect alive), #3989 head (chat window change; expect the #3988 abort too, since
+# it does not carry #3988's fix).
+name: ios-sim
+
+on:
+  push:
+    branches: [ci/ios-sim]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  QT_VER: 6.11.1
+  TOOLING_REPO: https://github.com/ann0see/jamulus.git
+  TOOLING_SHA: c5093be26d4abcb05a1619094d5e0aa511296ac0
+
+jobs:
+  qt:
+    runs-on: macos-26
+    timeout-minutes: 150
+    steps:
+      - name: "Fetch #340 tooling (pinned)"
+        run: |
+          git init -q tooling && cd tooling
+          git fetch -q --depth 1 "$TOOLING_REPO" "$TOOLING_SHA"
+          git checkout -q FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$TOOLING_SHA"
+          shasum -a 256 ios/qt6-simulator/* | tee ../tooling.sha256
+      - name: Toolchain report
+        run: |
+          sw_vers; uname -m; xcodebuild -version; cmake --version | head -1
+          xcrun simctl list runtimes | grep -i ios
+      - id: key
+        run: echo "k=qt-sim-$QT_VER-$(shasum -a 256 tooling/ios/qt6-simulator/build-qt6-simulator.sh tooling/ios/qt6-simulator/*.patch | shasum -a 256 | cut -c1-16)-$(xcodebuild -version | head -1 | tr -d ' ')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            ~/Qt6-sim-arm64
+            ~/Qt/${{ env.QT_VER }}/macos
+          key: ${{ steps.key.outputs.k }}
+      - name: Host Qt + build tools
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          brew install ninja
+          python3 -m pip install --break-system-packages "aqtinstall==3.3.0"
+          # qtdeclarative: Qt >= 6.11 host tools (lrelease) link QtQml (DISCOVERIES §319)
+          python3 -m aqt install-qt --outputdir ~/Qt mac desktop "$QT_VER" --archives qtbase qttools qttranslations qtdeclarative --modules qtshadertools qtmultimedia
+      - name: "Build Qt for iphonesimulator/arm64 (#340 script)"
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          git clone -q --depth 1 --branch "v$QT_VER" https://code.qt.io/qt/qtbase.git qtbase-src
+          QT_SRC=$PWD/qtbase-src QT_HOST_PATH=$HOME/Qt/$QT_VER/macos sh tooling/ios/qt6-simulator/build-qt6-simulator.sh 2>&1 | tail -200
+          otool -l ~/Qt6-sim-arm64/lib/QtCore.framework/QtCore | grep -A3 LC_BUILD_VERSION
+      - name: Save cache now (so a failing app job still reuses Qt)
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Qt6-sim-arm64
+            ~/Qt/${{ env.QT_VER }}/macos
+          key: ${{ steps.key.outputs.k }}-saved
+    outputs:
+      key: ${{ steps.key.outputs.k }}
+
+  app:
+    needs: qt
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arm: main
+            repo: jamulussoftware/jamulus
+            sha: 55b9aaaf74e81458468e7ff208bec8c62d0d967e
+          - arm: pr3988
+            repo: ann0see/jamulus
+            sha: 715000e647eedae7e54810f6d0b36b5805660c76
+          - arm: pr3989
+            repo: ann0see/jamulus
+            sha: c3d7b6ddc1c2a61dc0a2cb209484279e9ade456d
+    steps:
+      - name: Jamulus tree (pinned)
+        run: |
+          git init -q src && cd src
+          git fetch -q --depth 1 "https://github.com/${{ matrix.repo }}.git" "${{ matrix.sha }}"
+          git checkout -q FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "${{ matrix.sha }}"
+          git submodule update -q --init --depth 1
+          echo "ARM ${{ matrix.arm }} HEAD=$(git rev-parse HEAD) dirty=$(git status --porcelain | wc -l | tr -d ' ')"
+      - name: "#340 tooling into the tree (pinned)"
+        run: |
+          git init -q tooling && cd tooling
+          git fetch -q --depth 1 "$TOOLING_REPO" "$TOOLING_SHA" && git checkout -q FETCH_HEAD
+          mkdir -p ../src/ios/qt6-simulator && cp ios/qt6-simulator/* ../src/ios/qt6-simulator/
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/Qt6-sim-arm64
+            ~/Qt/${{ env.QT_VER }}/macos
+          key: ${{ needs.qt.outputs.key }}
+          restore-keys: ${{ needs.qt.outputs.key }}
+          fail-on-cache-miss: true
+      - name: Boot an iPhone simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys;d=json.load(sys.stdin)["devices"];print(next(x["udid"]+" "+x["name"]+" "+r for r in sorted(d,reverse=True) if "iOS" in r for x in d[r] if x["name"].startswith("iPhone")))')
+          echo "DEVICE $UDID"; echo "UDID=${UDID%% *}" >> "$GITHUB_ENV"
+          xcrun simctl boot "${UDID%% *}"; xcrun simctl bootstatus "${UDID%% *}" -b
+      - name: "Build, install, launch (#340 script)"
+        id: run
+        continue-on-error: true
+        run: cd src && sh ios/qt6-simulator/build-jamulus-simulator.sh "$UDID" 2>&1 | tail -80
+      - name: Observe 20 s
+        if: always()
+        run: |
+          mkdir -p out; sleep 20
+          ALIVE=$(xcrun simctl spawn "$UDID" launchctl list | grep -c app.jamulussoftware.Jamulus || true)
+          echo "RESULT arm=${{ matrix.arm }} build_launch=${{ steps.run.outcome }} alive_at_20s=$ALIVE" | tee out/result.txt
+          xcrun simctl io "$UDID" screenshot --type=png out/screen-20s.png || true
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "Jamulus"' > out/app.log 2>&1 || true
+          grep -m5 -iE 'UIScene|abort|SIGTRAP|terminat' out/app.log | tee -a out/result.txt || true
+          cp ~/Library/Logs/DiagnosticReports/Jamulus* out/ 2>/dev/null || true
+          ls out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-sim-${{ matrix.arm }}
+          path: out/
