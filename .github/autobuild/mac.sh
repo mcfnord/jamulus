@@ -85,7 +85,7 @@ setup() {
             qtmultimedia=("--modules")
         fi
         qtmultimedia+=("qtmultimedia")
-        python3 -m aqt install-qt --outputdir "${QT_DIR}" mac desktop "${QT_VERSION}" --archives qtbase qttools qttranslations "${qtmultimedia[@]}"
+        python3 -m aqt install-qt --outputdir "${QT_DIR}" mac desktop "${QT_VERSION}" --archives qtbase qttools qttranslations qtdeclarative "${qtmultimedia[@]}"
         # deactivate and remove venv as aqt is no longer needed from here on
         deactivate
         rm -rf venv
