@@ -93,7 +93,7 @@ jobs:
           git fetch -q --depth 1 "https://github.com/${{ matrix.repo }}.git" "${{ matrix.sha }}"
           git checkout -q FETCH_HEAD
           test "$(git rev-parse HEAD)" = "${{ matrix.sha }}"
-          git submodule update -q --init --depth 1
+          # no submodules: the only one is src/libs/oboe (Android), relative URL needs an origin
           echo "ARM ${{ matrix.arm }} HEAD=$(git rev-parse HEAD) dirty=$(git status --porcelain | wc -l | tr -d ' ')"
       - name: "#340 tooling into the tree (pinned)"
         run: |
