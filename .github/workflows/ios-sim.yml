@@ -131,7 +131,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          brew tap facebook/fb && brew install idb-companion
+          brew tap facebook/fb && brew trust facebook/fb && brew install idb-companion
           python3 -m pip install --break-system-packages fb-idb
           idb connect "$UDID" && idb describe --udid "$UDID" | head -5
       - name: Grant microphone, relaunch, tap Chat
@@ -144,6 +144,10 @@ jobs:
           xcrun simctl launch "$UDID" "$B"; sleep 12
           xcrun simctl io "$UDID" screenshot --type=png out/screen-pretap.png
           # Chat checkbox+label at ~(40,767) pt on the 402x874-pt screen (pr3988 screenshot, run 43627311206)
+          # simctl privacy grant does not suppress the iOS 26 mic prompt (run 43637482841): tap Allow (~275,552 pt)
+          idb ui tap --udid "$UDID" 275 552; sleep 2
+          xcrun simctl io "$UDID" screenshot --type=png out/screen-allowed.png
+          idb ui describe-all --udid "$UDID" > out/ax-main.json 2>&1 || true
           idb ui tap --udid "$UDID" 40 767; sleep 4
           xcrun simctl io "$UDID" screenshot --type=png out/screen-chat.png
           idb ui describe-all --udid "$UDID" > out/ax-chat.json 2>&1 || true
