@@ -51,7 +51,7 @@ jobs:
           brew install ninja
           python3 -m pip install --break-system-packages "aqtinstall==3.3.0"
           # qtdeclarative: Qt >= 6.11 host tools (lrelease) link QtQml (DISCOVERIES §319)
-          python3 -m aqt install-qt --outputdir ~/Qt mac desktop "$QT_VER" --archives qtbase qttools qttranslations qtdeclarative --modules qtshadertools qtmultimedia
+          python3 -m aqt install-qt --outputdir ~/Qt mac desktop "$QT_VER" --archives qtbase qttools qttranslations qtdeclarative qtshadertools qtmultimedia --modules qtshadertools qtmultimedia
       - name: "Build Qt for iphonesimulator/arm64 (#340 script)"
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
