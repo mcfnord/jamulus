@@ -77,15 +77,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arm: main
-            repo: jamulussoftware/jamulus
-            sha: 55b9aaaf74e81458468e7ff208bec8c62d0d967e
+          # run 43627311206 covered main/pr3988/pr3989 launch-only (DISCOVERIES §320).
+          # This run: tap Chat. pr3988 alone = chat-window control; combo = #3989 cherry-picked onto #3988.
           - arm: pr3988
             repo: ann0see/jamulus
             sha: 715000e647eedae7e54810f6d0b36b5805660c76
-          - arm: pr3989
-            repo: ann0see/jamulus
-            sha: c3d7b6ddc1c2a61dc0a2cb209484279e9ade456d
+          - arm: combo3988-3989
+            repo: mcfnord/jamulus
+            sha: bfd1d07142fdae19b6f707ed00656e839cd77c85
     steps:
       - name: Jamulus tree (pinned)
         run: |
@@ -128,6 +127,29 @@ jobs:
           grep -m5 -iE 'UIScene|abort|SIGTRAP|terminat' out/app.log | tee -a out/result.txt || true
           cp ~/Library/Logs/DiagnosticReports/Jamulus* out/ 2>/dev/null || true
           ls out
+      - name: Install idb (tap driver)
+        if: always()
+        continue-on-error: true
+        run: |
+          brew tap facebook/fb && brew install idb-companion
+          python3 -m pip install --break-system-packages fb-idb
+          idb connect "$UDID" && idb describe --udid "$UDID" | head -5
+      - name: Grant microphone, relaunch, tap Chat
+        if: always()
+        continue-on-error: true
+        run: |
+          B=app.jamulussoftware.Jamulus
+          xcrun simctl privacy "$UDID" grant microphone "$B"
+          xcrun simctl terminate "$UDID" "$B" || true; sleep 2
+          xcrun simctl launch "$UDID" "$B"; sleep 12
+          xcrun simctl io "$UDID" screenshot --type=png out/screen-pretap.png
+          # Chat checkbox+label at ~(40,767) pt on the 402x874-pt screen (pr3988 screenshot, run 43627311206)
+          idb ui tap --udid "$UDID" 40 767; sleep 4
+          xcrun simctl io "$UDID" screenshot --type=png out/screen-chat.png
+          idb ui describe-all --udid "$UDID" > out/ax-chat.json 2>&1 || true
+          ALIVE=$(xcrun simctl spawn "$UDID" launchctl list | grep -c "$B" || true)
+          echo "TAP arm=${{ matrix.arm }} alive_after_tap=$ALIVE" | tee -a out/result.txt
+          cp ~/Library/Logs/DiagnosticReports/Jamulus* out/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
